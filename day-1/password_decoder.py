@@ -5,7 +5,7 @@ from re import compile
 
 expression = compile(r'^(?P<direction>L|R)(?P<value>\d+)$')
 
-current = 50
+value_current = 50
 result = 0
 
 with open('./input.txt') as file:
@@ -22,13 +22,27 @@ with open('./input.txt') as file:
 
 			continue
 
+		print(value_current, end='\t')
+
 		value = int(match.group('value'))
+
+		rotations = value // 100
+
+		value %= 100
 		value *= -1 if match.group('direction') == 'L' else 1
 
-		current += value
-		current %= 100
+		if value:
+			value_old = value_current
 
-		if current == 0:
-			result += 1
+			value_current += value
+
+			if value_old and (value_current <= 0 or value_current >=100):
+				rotations += 1
+
+			value_current %= 100
+
+		result += rotations
+
+		print(line, value, value_current, rotations, result, sep='\t')
 
 print(result)
