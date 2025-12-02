@@ -3,7 +3,7 @@
 from re import compile
 
 
-pattern = compile(r'^(?P<section>\d+)(?P=section)$')
+pattern = compile(r'^(?P<section>\d+)(?P=section)+$')
 
 
 def main():
