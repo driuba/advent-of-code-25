@@ -2,33 +2,35 @@
 
 
 from sys import argv
+from operator import itemgetter
+
+
+def calculate(batteries, scale):
+	if scale < 0:
+		return 0
+
+	[index, value] = max(enumerate(batteries[:len(batteries) - scale]), key=itemgetter(1))
+
+	return value * 10 ** scale + calculate(batteries[index + 1:], scale - 1)
 
 
 def main():
-	if len(argv) == 1:
-		process('input.txt')
-	elif len(argv) == 2:
-		process(argv[1])
-	else:
+	length = len(argv)
+
+	if length > 3:
 		raise Exception('Multiple arguments are not supported.')
 
+	filename = argv[1] if len(argv) > 1 else 'input.txt'
+	scale = int(argv[2]) - 1 if len(argv) > 2 else 11
 
-def process(filename):
+	process(filename, scale)
+
+
+def process(filename, scale):
 	result = 0
 
 	for batteries in read_file(filename):
-		battery_result = 0
-
-		for i in range(len(batteries) - 1):
-			tens = 10 * batteries[i]
-
-			if tens < battery_result % 10:
-				continue
-
-			battery_candidate = tens + max(batteries[i + 1:])
-
-			if battery_candidate > battery_result:
-				battery_result = battery_candidate
+		battery_result = calculate(batteries, scale)
 
 		print(battery_result)
 
