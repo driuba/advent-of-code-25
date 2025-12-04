@@ -54,14 +54,34 @@ def process(filename):
 	for row in matrix:
 		assert len(row) == width, 'Input width must be consistent.'
 
-	result = [[0 for _ in r] for r in matrix]
+	count = 0
+	total = 0
 
-	for row in range(1, len(matrix) - 1):
-		for column in range(1, len(matrix[0]) - 1):
-			result[row][column] = 1 if apply_kernel([r[column - 1:column + 2] for r in matrix[row - 1:row + 2]]) < 4 else 0
-			result[row][column] *= matrix[row][column]
+	while True:
+		count += 1
 
-	print(sum([sum(r) for r in result]))
+		result = [[0 for _ in r] for r in matrix]
+		total_current = 0
+
+		for row in range(1, len(matrix) - 1):
+			for column in range(1, len(matrix[0]) - 1):
+				result[row][column] = 1 if apply_kernel([r[column - 1:column + 2] for r in matrix[row - 1:row + 2]]) < 4 else 0
+				result[row][column] *= matrix[row][column]
+
+		for row in range(len(matrix)):
+			for column in range(len(matrix[0])):
+				matrix[row][column] -= result[row][column]
+
+		total_current = sum([sum(r) for r in result])
+
+		total += total_current
+
+		print(f'{count: <3}', f'Current: {total_current: >6}')
+
+		if not total_current:
+			break
+
+	print('\n', f'Total: {total}', sep='')
 
 
 def read_file(filename):
