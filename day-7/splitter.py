@@ -5,20 +5,9 @@ from re import compile
 from sys import argv
 
 
-ONES = compile(r'(S|\^)')
+ONES = compile(r'(S)')
+TWOS = compile(r'\^')
 ZEROS = compile(r'\.')
-
-
-def count_bits(number):
-	result = 0
-
-	while number:
-		if number & 1:
-			result += 1
-
-		number >>= 1
-
-	return result
 
 
 def main():
@@ -32,21 +21,22 @@ def main():
 
 
 def process(filename):
-	input = list(read_file(filename))
+	manifold = list(read_file(filename))
 
-	current = input[0]
-	result = 0
+	beam = manifold[0]
 
-	for row in input[1:]:
-		split = row & current
+	for splitters in manifold[1:]:
+		current = [0 for _ in beam]
+		for (index, (particle, splitter)) in enumerate(zip(beam, splitters)):
+			if splitter and particle:
+				current[index - 1] += particle
+				current[index + 1] += particle
+			elif particle:
+				current[index] += particle
 
-		result += count_bits(split)
+		beam = current
 
-		split = split << 1 | split >> 1
-
-		current = (current | split) & ~row
-
-	print(result)
+	print(sum(beam))
 
 
 def read_file(filename):
@@ -54,9 +44,10 @@ def read_file(filename):
 		for line in file:
 			line = line.strip()
 			line = ONES.sub('1', line)
+			line = TWOS.sub('2', line)
 			line = ZEROS.sub('0', line)
 
-			yield int(line, base=2)
+			yield [int(c) for c in line]
 
 
 if __name__ == '__main__':
