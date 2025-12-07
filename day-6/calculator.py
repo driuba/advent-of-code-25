@@ -22,7 +22,7 @@ def process(filename):
 	def multiply(*inputs):
 		return reduce(lambda a, i: a * i, inputs)
 
-	input = list(zip(*read_file(filename)))
+	input = read_file(filename)
 
 	result = 0
 
@@ -39,11 +39,34 @@ def process(filename):
 
 
 def read_file(filename):
+	def reconstruct(numbers):
+		column = []
+
+		for number in numbers:
+			if number:
+				column.append(int(number))
+			else:
+				yield column
+
+				column = []
+		else:
+			yield column
+
+	result = []
+
 	with open(filename) as file:
 		for line in file:
-			line = line.strip()
+			line = line.strip('\r\n')
 
-			yield [int(p) if p.isdigit() else p for p in line.split()]
+			result.append(line[::-1])
+
+	numbers = result[:-1]
+	operations = result[-1].split()
+
+	numbers = [''.join(c).strip() for c in zip(*numbers)]
+	result = [(*ns, o) for (ns, o) in zip(reconstruct(numbers), operations)]
+
+	return result
 
 
 if __name__ == '__main__':
