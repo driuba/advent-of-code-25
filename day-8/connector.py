@@ -1,60 +1,31 @@
 #!/bin/env python3.14t
 
 
-from functools import reduce
 from math import inf, sqrt
+from operator import itemgetter
 from sys import argv
 
 
-def find_connections(boxes, count, distances):
-	result = [(None, None, inf) for _ in range(count)]
+def find_connections(boxes, distances):
+	def iterate():
+		for i in range(len(boxes) - 1):
+			for j in range(i + 1, len(boxes)):
+				yield (boxes[i], boxes[j], distances[i][j])
 
-	for i in range(len(boxes) - 1):
-		for j in range(i + 1, len(boxes)):
-			if distances[i][j] >= result[-1][-1]:
-				continue
-
-			for (index, (_, _, distance)) in enumerate(result):
-				if distance > distances[i][j]:
-					break
-			else:
-				continue
-
-			result.insert(index, (boxes[i], boxes[j], distances[i][j]))
-
-			result.pop()
-
-	return result
+	return sorted(iterate(), key=itemgetter(2))
 
 
 def main():
 	count = len(argv) - 1
 
-	assert count <= 2, 'More than two arguments are not supported.'
+	assert count <= 1, 'More than one argument is not supported.'
 
-	connections = int(argv[2]) if count >= 2 else 1000
 	filename = argv[1] if count >= 1 else 'input.txt'
 
-	process(connections, filename)
+	process(filename)
 
 
-def process(count, filename):
-	def construct_circut(box, connections):
-		if box not in connections:
-			return set()
-
-		circut = connections.pop(box)
-
-		for box_other in list(circut):
-			circut |= connections.pop(box_other, set())
-
-		for box_other in list(circut):
-			circut |= construct_circut(box_other, connections)
-
-		circut.add(box)
-
-		return circut
-
+def process(filename):
 	boxes = read_file(filename)
 
 	distances = [[0. if i == j else inf for j in boxes] for i in boxes]
@@ -65,29 +36,25 @@ def process(count, filename):
 
 	print('Calculated distances.')
 
-	connections = {}
-
-	for (a, b, _) in find_connections(boxes, count, distances):
-		if a not in connections:
-			connections[a] = set()
-
-		if b not in connections:
-			connections[b] = set()
-
-		connections[a].add(b)
-		connections[b].add(a)
-
-	print('Built connections.')
-
 	circuts = []
 
-	for box in boxes:
-		if box not in connections:
-			continue
+	for (a, b, _) in find_connections(boxes, distances):
+		current = {a, b}
 
-		circuts.append(construct_circut(box, connections))
+		for circut in circuts.copy():
+			if a in circut or b in circut:
+				current |= circut
 
-	print(reduce(lambda a, l: a * l, sorted((len(c) for c in circuts), reverse=True)[:3]))
+				circuts.remove(circut)
+
+		circuts.append(current)
+
+		if len(circuts[0]) == len(boxes):
+			break
+
+	print('Built circut.')
+
+	print(a[0] * b[0])
 
 
 def read_file(filename):
