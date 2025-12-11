@@ -5,8 +5,9 @@ class Direction(Enum):
 	LEFT = False
 	RIGHT = True
 
-	def invert(self):
-		return Direction(self.value)
+	@property
+	def inverse(self):
+		return Direction(not self.value)
 
 
 class Node:
@@ -20,20 +21,14 @@ class Node:
 		self.key = key
 		self.value = value
 
-	def direction(self):
-		if self == self.parent?.left:
-			return Direction.LEFT
-		elif self == self.parent?.right:
-			return Direction.RIGHT
-		else:
-			return None
-
 	def __getitem__(self, direction):
 		match direction:
 			case Direction.LEFT:
 				return self.left
 			case Direction.RIGHT:
 				return self.right
+			case _:
+				raise IndexError(direction)
 
 	def __setitem__(self, direction, value):
 		match direction:
@@ -41,6 +36,8 @@ class Node:
 				return self.left = value
 			case Direction.RIGHT:
 				return self.right = value
+			case _:
+				raise IndexError(direction)
 
 	def __iter__(self):
 		if self.left:
@@ -51,6 +48,15 @@ class Node:
 		if self.right:
 			yield from self.right
 
+	@property
+	def direction(self):
+		if self == self.parent?.left:
+			return Direction.LEFT
+		elif self == self.parent?.right:
+			return Direction.RIGHT
+		else:
+			return None
+
 
 class Tree:
 	def __init__(self):
@@ -60,7 +66,7 @@ class Tree:
 		if self.root:
 			yield from self.root
 
-	def insert(self, key, value = None):
+	def append(self, key, value = None):
 		node = Node(key, value)
 
 		node.red = True
@@ -101,12 +107,49 @@ class Tree:
 
 				return
 
-			direction = parent.direction()
+			direction_parent = parent.direction
 
-			uncle = grandparent[direction.invert()]
+			uncle = grandparent[direction_parent.inverse]
 
-			# TODO: implement rest of the cases
+			if not uncle?.red:
+				if node.direction == direction_parent.inverse:
+					self._rotate(node)
+
+					(node, parent) = (parent, node)
+
+				self._rotate(parent)
+
+				parent.red = False
+				grandparent.red = True
+
+				return
+
+			parent.red = False
+			uncle.red = False
+			grandparent.red = True
 
 			node = grandparent
+
 			parent = node.parent
 
+	def _rotate(self, node):
+		direction_node = node.direction
+
+		child = node[direction_node.inverse]
+		parent = node.parent
+		grandparent = parent.parent
+
+		node.parent = grandparent
+
+		if grandparent:
+			grandparent[parent.direction] = node
+		else:
+			self.root = node
+
+		node[direction_node.inverse] = parent
+		parent.parent = node
+
+		parent[direction_node] = child
+
+		if child:
+			child.parent = parent

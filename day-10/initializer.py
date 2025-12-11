@@ -8,7 +8,7 @@ from sys import argv
 
 def find_joltage_path(machine):
 	def distance(joltage_candidate, joltage_target):
-		return sqrt(sum((jc - jt) ** 2 for (jc, jt) in zip(joltage_candidate, joltage_target)))
+		return sum(abs(jc - jt) for (jc, jt) in zip(joltage_candidate, joltage_target))
 
 	def iterate_buttons(joltage, joltage_target, buttons):
 		for button in buttons:
