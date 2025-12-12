@@ -1,155 +1,54 @@
-from enum import Enum
+from heapq import heapify, heappop, heappush
 
 
-class Direction(Enum):
-	LEFT = False
-	RIGHT = True
+class Heap:
+	def __init__(self):
+		self.values = []
 
-	@property
-	def inverse(self):
-		return Direction(not self.value)
+		heapify(self.values)
+
+	def __contains__(self, item):
+		return item in self.values
+
+	def __len__(self):
+		return len(self.values)
+
+	def pop(self):
+		item = heappop(self.values)
+
+		if not item.values:
+			return item.key
+
+		return (item.key, *item.values)
+
+	def push(self, key, values):
+		heappush(self.values, Node(key, values))
 
 
 class Node:
-	def __init__(self, key, value):
-		self.red = Fasle
-
-		self.left = None
-		self.parent = None
-		self.right = None
-
+	def __init__(self, key, *values):
 		self.key = key
-		self.value = value
+		self.values = values
 
-	def __getitem__(self, direction):
-		match direction:
-			case Direction.LEFT:
-				return self.left
-			case Direction.RIGHT:
-				return self.right
-			case _:
-				raise IndexError(direction)
+	def __lt__(self, other):
+		return self.key < other.key
 
-	def __setitem__(self, direction, value):
-		match direction:
-			case Direction.LEFT:
-				return self.left = value
-			case Direction.RIGHT:
-				return self.right = value
-			case _:
-				raise IndexError(direction)
+	def __le__(self, other):
+		return self.key <= other.key
 
-	def __iter__(self):
-		if self.left:
-			yield from self.left
+	def __ge__(self, other):
+		return not self < other
 
-		yield self.value ?? self.key
+	def __gt__(self, other):
+		return not self <= other
 
-		if self.right:
-			yield from self.right
+	def __eq__(self, other):
+		return self._value == other._value
+
+	def __hash__(self):
+		return hash(self._value)
 
 	@property
-	def direction(self):
-		if self == self.parent?.left:
-			return Direction.LEFT
-		elif self == self.parent?.right:
-			return Direction.RIGHT
-		else:
-			return None
+	def _value(self):
+		return self.key if self.values else self.values[0]
 
-
-class Tree:
-	def __init__(self):
-		self.root = None
-
-	def __iter__(self):
-		if self.root:
-			yield from self.root
-
-	def append(self, key, value = None):
-		node = Node(key, value)
-
-		node.red = True
-
-		if not self.root:
-			self.root = node
-
-			return
-
-		parent = self.root
-
-		while True:
-			if node.key < parent.key:
-				if parent.left:
-					parent = parent.left
-				else:
-					node.parent = parent
-					parent.left = node
-
-					break
-			else:
-				if parent.right:
-					parent = parent.right
-				else:
-					node.parent = parent
-					parent.right = node
-
-					break
-
-		while parent:
-			if not parent.red:
-				return
-
-			grandparent = parent.parent
-
-			if not grandparent:
-				parent.red = False
-
-				return
-
-			direction_parent = parent.direction
-
-			uncle = grandparent[direction_parent.inverse]
-
-			if not uncle?.red:
-				if node.direction == direction_parent.inverse:
-					self._rotate(node)
-
-					(node, parent) = (parent, node)
-
-				self._rotate(parent)
-
-				parent.red = False
-				grandparent.red = True
-
-				return
-
-			parent.red = False
-			uncle.red = False
-			grandparent.red = True
-
-			node = grandparent
-
-			parent = node.parent
-
-	def _rotate(self, node):
-		direction_node = node.direction
-
-		child = node[direction_node.inverse]
-		parent = node.parent
-		grandparent = parent.parent
-
-		node.parent = grandparent
-
-		if grandparent:
-			grandparent[parent.direction] = node
-		else:
-			self.root = node
-
-		node[direction_node.inverse] = parent
-		parent.parent = node
-
-		parent[direction_node] = child
-
-		if child:
-			child.parent = parent

@@ -2,8 +2,10 @@
 
 
 from collections import deque
-from math import sqrt
+from math import inf, sqrt
 from sys import argv
+
+from models import Heap
 
 
 def find_joltage_path(machine):
@@ -19,23 +21,52 @@ def find_joltage_path(machine):
 
 			yield (joltage_candidate, button)
 
+	def iterate_path(joltage, joltage_paths):
+		while joltage:
+			yield joltage
+
+			joltage = joltage_paths[joltage]
+
 	try:
 		(_, buttons, joltage_target) = machine
 
-		queue = deque()
+		step_max = max((len(b) for b in buttons))
 
-		queue.append((tuple(0 for _ in joltage_target), [], buttons))
+		queue = Heap()
 
-		while len(queue):
-			(joltage, steps, buttons) = queue.popleft()
+		joltage_initial = tuple(0 for _ in joltage_target)
+
+		joltage_paths = {joltage_initial: None}
+
+		queue.push(
+			distance(joltage_initial, joltage_target),
+			joltage_initial
+		)
+
+		while queue:
+			(_, joltage) = queue.pop()
 
 			print(joltage_target, joltage, end='\r')
 
 			if joltage == joltage_target:
-				return steps
+				result = list(iterate_path(joltage, joltage_paths))
 
-			for (joltage_candidate, button) in sorted(iterate_buttons(joltage, joltage_target, buttons), key=lambda b: distance(b[0], joltage_target)):
-				queue.append((joltage_candidate, [*steps, button], buttons))
+				result.reverse()
+
+				return result[1:]
+
+			for (joltage_candidate, button) in iterate_buttons(joltage, joltage_target, buttons):
+				steps = sum((1 for _ in iterate_path(joltage, joltage_paths))) + 1
+
+				if joltage_candidate not in joltage_paths:
+					joltage_paths[joltage_candidate] = joltage
+
+					queue.push(
+						steps + distance(joltage_candidate, joltage_target) / step_max,
+						joltage_candidate
+					)
+				elif steps < sum((1 for _ in iterate_path(joltage_candidate, joltage_paths))):
+					joltage_paths[joltage_candidate] = joltage
 	finally:
 		print()
 
@@ -48,7 +79,7 @@ def find_state_path(machine):
 
 		queue.append((tuple(False for _ in state_target), [], buttons))
 
-		while len(queue):
+		while queue:
 			(state, steps, buttons) = queue.popleft()
 
 			print(state_target, state, end='\r')
