@@ -46,9 +46,50 @@ def count(iterable):
 
 
 def get_bounds(matrix):
-	bounds = transpose([[r[-1] / c if c else 0 for c in r[:-1]] for r in matrix])
+	"""
+	Computes bounds from **initial** equation system matrix.
 
-	return [min((c for c in r if c > 0), default=0) for r in bounds]
+	Initial implies variables being integers in range [0:1] and results column containing only non-negative integers
+	"""
+
+	upper = [
+		min((c.numerator for c in r if c), default=0)
+		for r in transpose([
+			[r[-1] if c else 0 for c in r[:-1]]
+			for r in matrix
+		])
+	]
+
+	lower = [0 for _ in upper]
+
+	for limit in range(1, len(upper)):
+		for (index_row_a, row_a) in enumerate(matrix):
+			if not limit <= sum(row_a[:-1]) <= limit + 1:
+				continue
+
+			for row_b in matrix[index_row_a + 1:]:
+				if not limit <= sum(row_b[:-1]) <= limit + 1:
+					continue
+
+				row_ab = [a * b for (a, b) in zip(row_a[:-1], row_b[:-1])]
+
+				if sum(row_ab) != limit:
+					continue
+
+				value = sum(upper[i] for (i, ab) in enumerate(row_ab) if ab)
+
+				index_a = min((i for (i, ab) in enumerate(a - b for (a, b) in zip(row_a[:-1], row_b[:-1])) if ab > 0), default=-1)
+				index_b = min((i for (i, ab) in enumerate(a - b for (a, b) in zip(row_a[:-1], row_b[:-1])) if ab < 0), default=-1)
+
+				if index_a >= 0:
+					lower[index_a] = max(lower[index_a], int(row_a[-1]) - value)
+
+				if index_b >= 0:
+					lower[index_b] = max(lower[index_b], int(row_b[-1]) - value)
+
+	lower = (min(l, u) for (l, u) in zip(lower, upper))
+
+	return [(i, l, u) for (i, (l, u)) in enumerate(zip(lower, upper))]
 
 
 def get_equations(matrix, results):
