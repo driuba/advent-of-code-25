@@ -4,6 +4,7 @@
 from fractions import Fraction
 from itertools import product
 from math import inf, lcm
+from operator import itemgetter
 from sys import argv
 
 
@@ -13,66 +14,13 @@ def analyze(_, buttons, joltages):
 		matrix = transpose(matrix)
 		matrix = [(*mr, Fraction(r)) for (mr, r) in zip(matrix, joltages)]
 
-		index_row = -1
+		solutions = solve(matrix)
 
-		while True:
-			index_row += 1
+		for index in range(len(solutions)):
+			multiplier = lcm(*(s.denominator for s in solutions[index] if s))
 
-			if index_row == len(matrix):
-				break
-
-			matrix[index_row:] = sorted(matrix[index_row:], key=lambda mr: min((i for (i, mc) in enumerate(mr) if mc), default=inf))
-
-			row_current = matrix[index_row]
-			index_column = min((i for (i, cc) in enumerate(row_current) if cc), default=-1)
-
-			if index_column == -1:
-				continue
-
-			column_current = row_current[index_column]
-			matrix[index_row] = row_current = tuple(c / column_current for c in row_current)
-
-			for index in range(index_row + 1, len(matrix)):
-				row = matrix[index]
-
-				multiplier = row[index_column]
-
-				if not multiplier:
-					continue
-
-				matrix[index] = tuple(c - multiplier * cc for (c, cc) in zip(row, row_current))
-
-		matrix = [r for r in matrix if any(r)]
-
-		#print(*matrix, sep='\n', end='\n\n')
-
-		running = True
-		substitutions_processed = set()
-
-		while running:
-			running = False
-
-			substitutions = [r for r in matrix if r not in substitutions_processed and count(c for c in r[:-1] if c) == 1]
-
-			for substitution in substitutions:
-				substitutions_processed.add(substitution)
-
-				running = True
-
-				index_column = min(i for (i, s) in enumerate(substitution) if s)
-
-				for index_row in range(len(matrix)):
-					row = matrix[index_row]
-
-					if substitution == row:
-						continue
-
-					multiplier = row[index_column]
-
-					if not multiplier:
-						continue
-
-					matrix[index_row] = tuple(c - multiplier * sc for (c, sc) in zip(row, substitution))
+			solutions[index] = (s * multiplier for s in solutions[index])
+			solutions[index] = tuple(s.numerator if s.is_integer() else s for s in solutions[index])
 
 		for index in range(len(matrix)):
 			multiplier = lcm(*(c.denominator for c in matrix[index] if c))
@@ -81,14 +29,9 @@ def analyze(_, buttons, joltages):
 			matrix[index] = tuple(c.numerator if c.is_integer() else c for c in matrix[index])
 
 		print(*matrix, sep='\n', end='\n\n')
+		print(*solutions, sep='\n', end='\n\n')
 
-		bounds = get_bounds(matrix)
-
-		print(*bounds, end='\n\n')
-
-		#equations = get_equations(matrix, joltages)
-
-		#print(min((sum(vs) for vs in product(*(range(*b) for b in bounds)) if all((e(vs) for e in equations)))))
+		print(min(sum(s) for s in solutions))
 	finally:
 		print()
 
@@ -103,10 +46,9 @@ def count(iterable):
 
 
 def get_bounds(matrix):
-	bounds = transpose([[c * r[-1] for c in r[:-1]] for r in matrix])
-	bounds = [min((c for c in r if c > 0), default=0) for r in bounds]
+	bounds = transpose([[r[-1] / c if c else 0 for c in r[:-1]] for r in matrix])
 
-	return bounds
+	return [min((c for c in r if c > 0), default=0) for r in bounds]
 
 
 def get_equations(matrix, results):
@@ -155,6 +97,123 @@ def read_file(filename):
 				)
 
 	return list(iterate())
+
+
+def reduce(matrix):
+	"""
+	Reduce the linear system matrix into row echelon form via Gaussian elimination.
+
+	By doing this for all lines and not just lower ones I'm eliminationg front variables at the same time from every equation.
+	From my testing this seems to reduce the equations into a from that do not share subsets of variables.
+	The end result is filtered and only non-trivial rows are returned.
+	"""
+
+	matrix = matrix.copy()
+
+	index_row = 0
+
+	while index_row < len(matrix):
+		try:
+			matrix[index_row:] = sorted(matrix[index_row:], key=lambda mr: min((i for (i, mc) in enumerate(mr) if mc), default=inf))
+
+			row_current = matrix[index_row]
+			index_column = min((i for (i, cc) in enumerate(row_current) if cc), default=-1)
+
+			if index_column == -1:
+				continue
+
+			column_current = row_current[index_column]
+			matrix[index_row] = row_current = tuple(c / column_current for c in row_current)
+
+			for index in range(len(matrix)):
+				if index_row == index:
+					continue
+
+				row = matrix[index]
+
+				multiplier = row[index_column]
+
+				if not multiplier:
+					continue
+
+				matrix[index] = tuple(c - multiplier * cc for (c, cc) in zip(row, row_current))
+		finally:
+			index_row += 1
+
+	matrix = [r for r in matrix if any(r)]
+
+	for index in range(len(matrix)):
+		multiplier = lcm(*(c.denominator for c in matrix[index] if c))
+
+		matrix[index] = tuple(c * multiplier for c in matrix[index])
+
+	return matrix
+
+def solve(matrix):
+	def solve_internal(matrix, solution_initial = None, solutions = set()):
+		if not len(matrix):
+			return
+
+		matrix = reduce(matrix)
+
+		if any(not any(r[:-1]) and r[-1] for r in matrix):
+			return
+
+		solution = [None for _ in matrix[0][:-1]] if solution_initial is None else list(solution_initial)
+
+		substitutions = [(i, r) for (i, r) in enumerate(matrix) if count(c for c in r[:-1] if c) == 1]
+		substitutions.sort(key=itemgetter(0), reverse=True)
+
+		for (index_row, row) in substitutions:
+			index = min((i for (i, r) in enumerate(row) if r))
+
+			if not (solution[index] is None or solution[index] == row[-1]):
+				return
+
+			if row[-1] < 0 or not row[-1].is_integer():
+				return
+
+			solution[index] = row[-1]
+
+			del matrix[index_row]
+
+		if not any(s is None for s in solution):
+			solutions.add(tuple(solution))
+
+			yield solution
+
+			return
+
+		if not len(matrix):
+			return
+
+		for (index, bound) in enumerate(get_bounds(matrix)):
+			guess_solution = solution.copy()
+
+			if guess_solution[index] is not None:
+				continue
+
+			guess_solution[index] = bound
+			guess_solution = tuple(guess_solution)
+
+			if guess_solution in solutions:
+				continue
+
+			guess_matrix = matrix.copy()
+
+			for index_guess in range(len(guess_matrix)):
+				guess_row = guess_matrix[index_guess]
+
+				multiplier = guess_row[index_guess]
+
+				if not multiplier:
+					continue
+
+				guess_matrix[index_guess] = (*(0 if i == index else c for (i, c) in enumerate(guess_row[:-1])), guess_row[-1] - multiplier * bound)
+
+			yield from solve_internal(guess_matrix, guess_solution, solutions)
+
+	return list(solve_internal(matrix))
 
 
 def transpose(matrix):
