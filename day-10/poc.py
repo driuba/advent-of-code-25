@@ -189,17 +189,9 @@ def solve(matrix, bounds):
 	if not len(matrix):
 		return []
 
-	matrices = set()
 	solutions = set()
 
 	def solve_internal(matrix_initial, solution_initial):
-		_matrix = tuple(matrix_initial)
-
-		if _matrix in matrices:
-			return
-
-		matrices.add(_matrix)
-
 		matrix = reduce(matrix_initial)
 
 		if any(not any(r[:-1]) and r[-1] for r in matrix):
@@ -226,7 +218,7 @@ def solve(matrix, bounds):
 		solution = tuple(solution)
 
 		if not (any(s is None for s in solution) or solution in solutions):
-			solutions.add(tuple(solution))
+			solutions.add(solution)
 
 			yield solution
 
@@ -242,6 +234,8 @@ def solve(matrix, bounds):
 
 				if guess_solution in solutions:
 					continue
+
+				solutions.add(guess_solution)
 
 				guess_matrix = list((*(0 if i == index else c for (i, c) in enumerate(r[:-1])), r[-1] - r[index] * guess_variable) for r in matrix)
 
