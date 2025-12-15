@@ -10,11 +10,15 @@ from sys import argv
 
 def analyze(_, buttons, joltages):
 	try:
+		print()
+
 		matrix = [[Fraction(1) if i in b else Fraction(0) for i in range(len(joltages))] for b in buttons]
 		matrix = transpose(matrix)
 		matrix = [(*mr, Fraction(r)) for (mr, r) in zip(matrix, joltages)]
 
-		solutions = solve(matrix)
+		bounds = get_bounds(matrix)
+
+		solutions = solve(matrix, bounds)
 
 		for index in range(len(solutions)):
 			multiplier = lcm(*(s.denominator for s in solutions[index] if s))
@@ -29,9 +33,10 @@ def analyze(_, buttons, joltages):
 			matrix[index] = tuple(c.numerator if c.is_integer() else c for c in matrix[index])
 
 		print(*matrix, sep='\n', end='\n\n')
-		print(*solutions, sep='\n', end='\n\n')
+		print(*bounds, end='\n\n')
+		print(*solutions, sep='\n')
 
-		print(min(sum(s) for s in solutions))
+		return min((sum(s) for s in solutions), default=0)
 	finally:
 		print()
 
@@ -49,7 +54,8 @@ def get_bounds(matrix):
 	"""
 	Computes bounds from **initial** equation system matrix.
 
-	Initial implies variables being integers in range [0:1] and results column containing only non-negative integers
+	Initial implies variables being integers in range [0:1] and results column containing only non-negative integers.
+	All matrix values are expected to be of `Fraction` type.
 	"""
 
 	upper = [
@@ -62,34 +68,20 @@ def get_bounds(matrix):
 
 	lower = [0 for _ in upper]
 
-	for limit in range(1, len(upper)):
-		for (index_row_a, row_a) in enumerate(matrix):
-			if not limit <= sum(row_a[:-1]) <= limit + 1:
+	for row in matrix:
+		value = row[-1].numerator
+
+		row = [c.numerator * u for (c, u) in zip(row, upper)]
+
+		for (index, lower_current) in enumerate(lower):
+			if not row[index]:
 				continue
 
-			for row_b in matrix[index_row_a + 1:]:
-				if not limit <= sum(row_b[:-1]) <= limit + 1:
-					continue
-
-				row_ab = [a * b for (a, b) in zip(row_a[:-1], row_b[:-1])]
-
-				if sum(row_ab) != limit:
-					continue
-
-				value = sum(upper[i] for (i, ab) in enumerate(row_ab) if ab)
-
-				index_a = min((i for (i, ab) in enumerate(a - b for (a, b) in zip(row_a[:-1], row_b[:-1])) if ab > 0), default=-1)
-				index_b = min((i for (i, ab) in enumerate(a - b for (a, b) in zip(row_a[:-1], row_b[:-1])) if ab < 0), default=-1)
-
-				if index_a >= 0:
-					lower[index_a] = max(lower[index_a], int(row_a[-1]) - value)
-
-				if index_b >= 0:
-					lower[index_b] = max(lower[index_b], int(row_b[-1]) - value)
+			lower[index] = max(lower_current, value - sum(b for (i, b) in enumerate(row) if i != index))
 
 	lower = (min(l, u) for (l, u) in zip(lower, upper))
 
-	return [(i, l, u) for (i, (l, u)) in enumerate(zip(lower, upper))]
+	return list(zip(lower, upper))
 
 
 def get_equations(matrix, results):
@@ -115,8 +107,16 @@ def main():
 def process(filename):
 	machines = read_file(filename)
 
+	total = 0
+
 	for machine in machines:
-		analyze(*machine)
+		result = analyze(*machine)
+
+		total += result
+
+		print('The result is', result)
+
+	print('The total is', total)
 
 
 def read_file(filename):
@@ -149,7 +149,7 @@ def reduce(matrix):
 	The end result is filtered and only non-trivial rows are returned.
 	"""
 
-	matrix = matrix.copy()
+	matrix = list(matrix)
 
 	index_row = 0
 
@@ -183,78 +183,71 @@ def reduce(matrix):
 
 	matrix = [r for r in matrix if any(r)]
 
-	for index in range(len(matrix)):
-		multiplier = lcm(*(c.denominator for c in matrix[index] if c))
-
-		matrix[index] = tuple(c * multiplier for c in matrix[index])
-
 	return matrix
 
-def solve(matrix):
-	def solve_internal(matrix, solution_initial = None, solutions = set()):
-		if not len(matrix):
+def solve(matrix, bounds):
+	if not len(matrix):
+		return []
+
+	matrices = set()
+	solutions = set()
+
+	def solve_internal(matrix_initial, solution_initial):
+		_matrix = tuple(matrix_initial)
+
+		if _matrix in matrices:
 			return
 
-		matrix = reduce(matrix)
+		matrices.add(_matrix)
+
+		matrix = reduce(matrix_initial)
 
 		if any(not any(r[:-1]) and r[-1] for r in matrix):
 			return
 
-		solution = [None for _ in matrix[0][:-1]] if solution_initial is None else list(solution_initial)
+		solution = list(solution_initial)
 
-		substitutions = [(i, r) for (i, r) in enumerate(matrix) if count(c for c in r[:-1] if c) == 1]
-		substitutions.sort(key=itemgetter(0), reverse=True)
+		substitutions = ((i, r) for (i, r) in enumerate(matrix) if count(c for c in r[:-1] if c) == 1)
+		substitutions = sorted(substitutions, key=itemgetter(0), reverse=True)
 
 		for (index_row, row) in substitutions:
-			index = min((i for (i, r) in enumerate(row) if r))
+			index_variable = min((i for (i, r) in enumerate(row) if r))
 
-			if not (solution[index] is None or solution[index] == row[-1]):
-				return
+			if not (solution[index_variable] is None or solution[index_variable] == row[-1]):
+				raise ValueError(f'Solution already has a value; index: {index_variable}, current: {solution[index_variable]}, candidate: {row[-1]}.')
 
-			if row[-1] < 0 or not row[-1].is_integer():
-				return
-
-			solution[index] = row[-1]
+			solution[index_variable] = row[-1]
 
 			del matrix[index_row]
 
-		if not any(s is None for s in solution):
+		if not all(s is None or (s.is_integer() and l <= s <= u) for (s, (l, u)) in zip(solution, bounds)):
+			return
+
+		solution = tuple(solution)
+
+		if not (any(s is None for s in solution) or solution in solutions):
 			solutions.add(tuple(solution))
 
 			yield solution
 
-			return
-
 		if not len(matrix):
 			return
 
-		for (index, bound) in enumerate(get_bounds(matrix)):
-			guess_solution = solution.copy()
-
-			if guess_solution[index] is not None:
+		for (index, (lower, upper)) in enumerate(bounds):
+			if solution[index] is not None:
 				continue
 
-			guess_solution[index] = bound
-			guess_solution = tuple(guess_solution)
+			for guess_variable in range(lower, upper + 1):
+				guess_solution = tuple(guess_variable if i == index else s for (i, s) in enumerate(solution))
 
-			if guess_solution in solutions:
-				continue
-
-			guess_matrix = matrix.copy()
-
-			for index_guess in range(len(guess_matrix)):
-				guess_row = guess_matrix[index_guess]
-
-				multiplier = guess_row[index_guess]
-
-				if not multiplier:
+				if guess_solution in solutions:
 					continue
 
-				guess_matrix[index_guess] = (*(0 if i == index else c for (i, c) in enumerate(guess_row[:-1])), guess_row[-1] - multiplier * bound)
+				guess_matrix = list((*(0 if i == index else c for (i, c) in enumerate(r[:-1])), r[-1] - r[index] * guess_variable) for r in matrix)
 
-			yield from solve_internal(guess_matrix, guess_solution, solutions)
+				yield from solve_internal(guess_matrix, guess_solution)
 
-	return list(solve_internal(matrix))
+	return list(solve_internal(matrix, (None for _ in bounds)))
 
 
 def transpose(matrix):
