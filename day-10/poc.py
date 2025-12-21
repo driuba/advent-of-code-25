@@ -7,6 +7,15 @@ from math import inf, lcm
 from operator import itemgetter
 from sys import argv
 
+from matrices import (
+	add_member,
+	identity,
+	multiply,
+	multiply_member,
+	multiply_scalar,
+	transpose
+)
+
 
 def analyze(_, buttons, joltages):
 	try:
@@ -14,84 +23,26 @@ def analyze(_, buttons, joltages):
 
 		matrix = [[Fraction(1) if i in b else Fraction(0) for i in range(len(joltages))] for b in buttons]
 		matrix = transpose(matrix)
-		matrix = [(*mr, Fraction(r)) for (mr, r) in zip(matrix, joltages)]
+		matrix = [[*mr, Fraction(r)] for (mr, r) in zip(matrix, joltages)]
 
-		bounds = get_bounds(matrix)
+		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]])
 
-		solutions = solve(matrix, bounds)
-
-		for index in range(len(solutions)):
-			multiplier = lcm(*(s.denominator for s in solutions[index] if s))
-
-			solutions[index] = (s * multiplier for s in solutions[index])
-			solutions[index] = tuple(s.numerator if s.is_integer() else s for s in solutions[index])
+		solution = [s.numerator if s.is_integer() else s for s in solution]
 
 		for index in range(len(matrix)):
 			multiplier = lcm(*(c.denominator for c in matrix[index] if c))
 
 			matrix[index] = (c * multiplier for c in matrix[index])
-			matrix[index] = tuple(c.numerator if c.is_integer() else c for c in matrix[index])
+			matrix[index] = [c.numerator if c.is_integer() else c for c in matrix[index]]
 
 		print(*matrix, sep='\n', end='\n\n')
-		print(*bounds, end='\n\n')
-		print(*solutions, sep='\n')
+		print(*solution)
 
-		return min((sum(s) for s in solutions), default=0)
+		return sum(solution)
+	except NotImplementedError:
+		return 0
 	finally:
 		print()
-
-
-def count(iterable):
-	result = 0
-
-	for _ in iterable:
-		result += 1
-
-	return result
-
-
-def get_bounds(matrix):
-	"""
-	Computes bounds from **initial** equation system matrix.
-
-	Initial implies variables being integers in range [0:1] and results column containing only non-negative integers.
-	All matrix values are expected to be of `Fraction` type.
-	"""
-
-	upper = [
-		min((c.numerator for c in r if c), default=0)
-		for r in transpose([
-			[r[-1] if c else 0 for c in r[:-1]]
-			for r in matrix
-		])
-	]
-
-	lower = [0 for _ in upper]
-
-	for row in matrix:
-		value = row[-1].numerator
-
-		row = [c.numerator * u for (c, u) in zip(row, upper)]
-
-		for (index, lower_current) in enumerate(lower):
-			if not row[index]:
-				continue
-
-			lower[index] = max(lower_current, value - sum(b for (i, b) in enumerate(row) if i != index))
-
-	lower = (min(l, u) for (l, u) in zip(lower, upper))
-
-	return list(zip(lower, upper))
-
-
-def get_equations(matrix, results):
-	def get_check(variables, result):
-		def check(coefficients):
-			return sum((c * v for (c, v) in zip(coefficients, variables))) == result
-
-		return check
-
-	return [get_check(r[:-1], r[-1]) for r in matrix]
 
 
 def main():
@@ -102,6 +53,114 @@ def main():
 	filename = argv[1] if count >= 1 else 'input.txt'
 
 	process(filename)
+
+
+def optimize(matrix, target):
+	"""
+	Simplex optimization to find optimal solution.
+
+	This method is supposed to be used if the system has infinite amount of solutions.
+	However, it should work in cases where there's only one solution.
+	The input is expected to be normal linear equation system in matrix form.
+	"""
+
+	def __construct_inverse(matrix_transposed, indices_basic):
+		matrix_basic = transpose([matrix_transposed[i] for i in indices_basic])
+
+		matrix_basic_inverse = [[*rb, *ri] for (rb, ri) in zip(matrix_basic, identity(len(matrix_basic), Fraction))]
+		matrix_basic_inverse = reduce(matrix_basic_inverse)
+		matrix_basic_inverse = [r[len(r) // 2:] for r in matrix_basic_inverse]
+
+		return matrix_basic_inverse
+
+	indices_basic = []
+
+	for row in matrix:
+		for (index, column) in enumerate(row[:-1]):
+			if not column:
+				continue
+
+			if index in indices_basic:
+				continue
+
+			indices_basic.append(index)
+
+			break
+
+	matrix_transposed = transpose(matrix)
+
+	matrix_basic_inverse = __construct_inverse(matrix_transposed, indices_basic)
+
+	solution = [[Fraction(0)] for _ in matrix[0][:-1]]
+
+	solution_basic = multiply(matrix_basic_inverse, [[r[-1]] for r in matrix])
+
+	for (index_solution, solution_variable) in zip(indices_basic, solution_basic):
+		solution[index_solution] = solution_variable
+
+	while True:
+		solution_basic = multiply(matrix_basic_inverse, [[r[-1]] for r in matrix])
+
+		target_basic = [target[ib] for ib in indices_basic]
+
+		costs = multiply_member(target, solution)
+
+		costs_basic = transpose(multiply_member(target_basic, solution_basic))
+
+		(index_entering, cost_entering, distances_basic) = min(
+			(
+				(
+					i,
+					costs[i][0] - multiply(costs_basic, d)[0][0],
+					d
+				)
+				for (i, d)
+				in (
+					(i, multiply(matrix_basic_inverse, transpose([r])))
+					for (i, r)
+					in enumerate(matrix_transposed[:-1])
+					if i not in indices_basic
+				)
+			),
+			key=itemgetter(1)
+		)
+
+		if cost_entering >= 0:
+			return transpose(solution)[0]
+
+		(index_leaving, distance_leaving, ratio) = min(
+			(
+				(i, db, sb / -db if db else sb * inf)
+				for (i, (sb, db))
+				in enumerate(zip(
+					transpose(solution_basic)[0],
+					transpose(distances_basic)[0]
+				))
+			),
+			key=itemgetter(1)
+		)
+
+		if distance_leaving >= 0:
+			return []
+
+		distances = [[Fraction(0)] for _ in solution]
+
+		for (index_basic, distance_basic) in zip(indices_basic, distances_basic):
+			distances[index_basic] = distance_basic
+
+		distances[index_entering] = [Fraction(1)]
+
+		distances = multiply_scalar(ratio, distances)
+
+		solution = add_member(solution, distances)
+
+		indices_basic[index_leaving] = index_entering
+
+		matrix_basic_inverse = [
+			r[1:]
+			for r
+			in reduce([[*d, *r] for (d, r) in zip(distances_basic, matrix_basic_inverse)], index_leaving)
+		]
 
 
 def process(filename):
@@ -140,31 +199,33 @@ def read_file(filename):
 	return list(iterate())
 
 
-def reduce(matrix):
+def reduce(matrix, index_row_target = None):
 	"""
-	Reduce the linear system matrix into row echelon form via Gaussian elimination.
+	Reduce the linear system matrix into row echelon form via Gauss-Jordan elimination.
 
 	By doing this for all lines and not just lower ones I'm eliminationg front variables at the same time from every equation.
 	From my testing this seems to reduce the equations into a from that do not share subsets of variables.
 	The end result is filtered and only non-trivial rows are returned.
 	"""
 
-	matrix = list(matrix)
+	matrix = [r.copy() for r in matrix]
 
-	index_row = 0
+	index_row = 0 if index_row_target is None else index_row_target
+	count_rows = len(matrix) if index_row_target is None else index_row_target + 1
 
-	while index_row < len(matrix):
+	while index_row < count_rows:
 		try:
-			matrix[index_row:] = sorted(matrix[index_row:], key=lambda mr: min((i for (i, mc) in enumerate(mr) if mc), default=inf))
+			if index_row_target is None:
+				matrix[index_row:] = sorted(matrix[index_row:], key=lambda mr: next((i for (i, mc) in enumerate(mr) if mc), inf))
 
 			row_current = matrix[index_row]
-			index_column = min((i for (i, cc) in enumerate(row_current) if cc), default=-1)
+			index_column = next((i for (i, cc) in enumerate(row_current) if cc), -1) if index_row_target is None else 0
 
 			if index_column == -1:
 				continue
 
 			column_current = row_current[index_column]
-			matrix[index_row] = row_current = tuple(c / column_current for c in row_current)
+			matrix[index_row] = row_current = [c / column_current for c in row_current]
 
 			for index in range(len(matrix)):
 				if index_row == index:
@@ -177,7 +238,7 @@ def reduce(matrix):
 				if not multiplier:
 					continue
 
-				matrix[index] = tuple(c - multiplier * cc for (c, cc) in zip(row, row_current))
+				matrix[index] = [c - multiplier * cc for (c, cc) in zip(row, row_current)]
 		finally:
 			index_row += 1
 
@@ -185,75 +246,19 @@ def reduce(matrix):
 
 	return matrix
 
-def solve(matrix, bounds):
+def solve(matrix, target):
 	if not len(matrix):
 		return []
 
-	solutions = set()
+	matrix = reduce(matrix)
 
-	def solve_internal(matrix_initial, solution_initial):
-		matrix = reduce(matrix_initial)
+	if any((all((not c for c in r[:-1])) and r[-1] for r in matrix)):
+		return []
 
-		if any(not any(r[:-1]) and r[-1] for r in matrix):
-			return
+	if all((sum((1 for c in r[:-1] if c)) == 1 for r in matrix)):
+		return [r[-1] for r in matrix]
 
-		solution = list(solution_initial)
-
-		substitutions = ((i, r) for (i, r) in enumerate(matrix) if count(c for c in r[:-1] if c) == 1)
-		substitutions = sorted(substitutions, key=itemgetter(0), reverse=True)
-
-		for (index_row, row) in substitutions:
-			index_variable = min((i for (i, r) in enumerate(row) if r))
-
-			if not (solution[index_variable] is None or solution[index_variable] == row[-1]):
-				raise ValueError(f'Solution already has a value; index: {index_variable}, current: {solution[index_variable]}, candidate: {row[-1]}.')
-
-			solution[index_variable] = row[-1]
-
-			del matrix[index_row]
-
-		if not all(s is None or (s.is_integer() and l <= s <= u) for (s, (l, u)) in zip(solution, bounds)):
-			return
-
-		solution = tuple(solution)
-
-		if not (any(s is None for s in solution) or solution in solutions):
-			solutions.add(solution)
-
-			yield solution
-
-		if not len(matrix):
-			return
-
-		for (index, (lower, upper)) in enumerate(bounds):
-			if solution[index] is not None:
-				continue
-
-			for guess_variable in range(lower, upper + 1):
-				guess_solution = tuple(guess_variable if i == index else s for (i, s) in enumerate(solution))
-
-				if guess_solution in solutions:
-					continue
-
-				solutions.add(guess_solution)
-
-				guess_matrix = list((*(0 if i == index else c for (i, c) in enumerate(r[:-1])), r[-1] - r[index] * guess_variable) for r in matrix)
-
-				yield from solve_internal(guess_matrix, guess_solution)
-
-	return list(solve_internal(matrix, (None for _ in bounds)))
-
-
-def transpose(matrix):
-	def transpose_column(column):
-		for row in range(len(matrix)):
-			yield matrix[row][column]
-
-	def transpose_rows():
-		for column in range(len(matrix[0])):
-			yield list(transpose_column(column))
-
-	return list(transpose_rows())
+	return optimize(matrix, target)
 
 
 if __name__ == '__main__':

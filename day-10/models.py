@@ -7,9 +7,6 @@ class Heap:
 
 		heapify(self.values)
 
-	def __contains__(self, item):
-		return item in self.values
-
 	def __len__(self):
 		return len(self.values)
 
@@ -21,11 +18,11 @@ class Heap:
 
 		return (item.key, *item.values)
 
-	def push(self, key, values):
-		heappush(self.values, Node(key, values))
+	def push(self, key, *values):
+		heappush(self.values, _Node(key, *values))
 
 
-class Node:
+class _Node:
 	def __init__(self, key, *values):
 		self.key = key
 		self.values = values
@@ -43,12 +40,8 @@ class Node:
 		return not self <= other
 
 	def __eq__(self, other):
-		return self._value == other._value
+		return self.key == other.key
 
 	def __hash__(self):
-		return hash(self._value)
-
-	@property
-	def _value(self):
-		return self.key if self.values else self.values[0]
+		return hash(self.key)
 
