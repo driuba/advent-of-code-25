@@ -25,7 +25,7 @@ def analyze(_, buttons, joltages):
 		matrix = transpose(matrix)
 		matrix = [[*mr, Fraction(r)] for (mr, r) in zip(matrix, joltages)]
 
-		bounds = get_bounds(matrix)
+		# bounds = get_bounds(matrix)
 		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]])
 
 		for row in matrix:
@@ -124,49 +124,49 @@ def optimize(matrix, target):
 
 	indices_basic = list(range(count_variables, len(target)))
 
-	print(*(f'{i: >8}' for i in indices_basic), sep='')
-	print(*(f'{s[0]: >8}' for s in solution), sep='')
-	print(*(f'{t[0]: >8}' for t in target), sep='', end='\n\n')
-
-	for row in matrix:
-		for column in row:
-			print(f'{column: >8}', end='')
-
-		print()
-
-	print()
+	# print(*(f'{i: >8}' for i in indices_basic), sep='')
+	# print(*(f'{s[0]: >8}' for s in solution), sep='')
+	# print(*(f'{t[0]: >8}' for t in target), sep='', end='\n\n')
+	#
+	# for row in matrix:
+	# 	for column in row:
+	# 		print(f'{column: >8}', end='')
+	#
+	# 	print()
+	#
+	# print()
 
 	while True:
 		solution_basic = multiply(matrix_basic_inverse, [r[-1:] for r in matrix])
 
 		target_basic = transpose([target[ib] for ib in indices_basic])
 
-		print(*(f'{s[0]: >8}' for s in solution_basic), sep='')
-		print(*(f'{s[0]: >8}' for s in solution), sep='')
-		print(*(f'{c: >8}' for c in target_basic[0]), sep='', end='\n\n')
-
-		print(
-			*(
-				(i, c)
-				for (i, c, d)
-				in (
-					(
-						i,
-						target[i][0] - multiply(target_basic, d)[0][0],
-						d
-					)
-					for (i, d)
-					in (
-						(i, multiply(matrix_basic_inverse, transpose([r])))
-						for (i, r)
-						in enumerate(matrix_transposed[:-1])
-						if i not in indices_basic
-					)
-				)
-			),
-			sep='\n',
-			end='\n\n'
-		)
+		# print(*(f'{s[0]: >8}' for s in solution_basic), sep='')
+		# print(*(f'{s[0]: >8}' for s in solution), sep='')
+		# print(*(f'{c: >8}' for c in target_basic[0]), sep='', end='\n\n')
+		#
+		# print(
+		# 	*(
+		# 		(i, c)
+		# 		for (i, c, d)
+		# 		in (
+		# 			(
+		# 				i,
+		# 				target[i][0] - multiply(target_basic, d)[0][0],
+		# 				d
+		# 			)
+		# 			for (i, d)
+		# 			in (
+		# 				(i, multiply(matrix_basic_inverse, transpose([r])))
+		# 				for (i, r)
+		# 				in enumerate(matrix_transposed[:-1])
+		# 				if i not in indices_basic
+		# 			)
+		# 		)
+		# 	),
+		# 	sep='\n',
+		# 	end='\n\n'
+		# )
 
 		(index_entering, cost_entering, distances_basic) = min(
 			(
@@ -192,7 +192,7 @@ def optimize(matrix, target):
 			key=itemgetter(0)
 		)
 
-		print(index_entering, cost_entering, distances_basic)
+		# print(index_entering, cost_entering, distances_basic)
 
 		if cost_entering >= 0:
 			if target is target_phase_2:
@@ -208,18 +208,18 @@ def optimize(matrix, target):
 
 			continue
 
-		print(
-			*(
-				(i, sb, db)
-				for (i, (sb, db))
-				in enumerate(zip(
-					transpose(solution_basic)[0],
-					transpose(distances_basic)[0]
-				))
-			),
-			sep='\n',
-			end='\n\n'
-		)
+		# print(
+		# 	*(
+		# 		(i, sb, db)
+		# 		for (i, (sb, db))
+		# 		in enumerate(zip(
+		# 			transpose(solution_basic)[0],
+		# 			transpose(distances_basic)[0]
+		# 		))
+		# 	),
+		# 	sep='\n',
+		# 	end='\n\n'
+		# )
 
 		(index_leaving, distance_leaving, ratio) = min(
 			(
@@ -240,7 +240,7 @@ def optimize(matrix, target):
 			key=itemgetter(2, 0)
 		)
 
-		print(index_leaving, distance_leaving, ratio)
+		# print(index_leaving, distance_leaving, ratio)
 
 		if distance_leaving <= 0:
 			return []
@@ -261,17 +261,17 @@ def optimize(matrix, target):
 			in reduce([[*d, *r] for (d, r) in zip(distances_basic, matrix_basic_inverse)], index_leaving)
 		]
 
-		print(index_entering, index_leaving, end='\n\n')
-
-		print(*(f'{i: >8}' for i in indices_basic), sep='', end='\n\n')
-
-		for row in matrix_basic_inverse:
-			for column in row:
-				print(f'{column: >8}', end='')
-
-			print()
-
-		print()
+		# print(index_entering, index_leaving, end='\n\n')
+		#
+		# print(*(f'{i: >8}' for i in indices_basic), sep='', end='\n\n')
+		#
+		# for row in matrix_basic_inverse:
+		# 	for column in row:
+		# 		print(f'{column: >8}', end='')
+		#
+		# 	print()
+		#
+		# print()
 
 
 def process(filename):
@@ -279,12 +279,12 @@ def process(filename):
 
 	total = 0
 
-	for machine in machines[1:-1]:
+	for (index, machine) in enumerate(machines):
 		result = analyze(*machine)
 
 		total += result
 
-		print('The result is', result)
+		print('The result for', index + 1 ,'is', result)
 
 	print('The total is', total)
 
@@ -357,21 +357,57 @@ def reduce(matrix, index_row_target = None):
 
 	return matrix
 
-def solve(matrix_initial, target):
-	matrix = matrix_initial
-
+def solve(matrix, target):
 	if not len(matrix):
 		return []
+
+	count_variables = len(matrix[0]) - 1
 
 	matrix = reduce(matrix)
 
 	if any((all((not c for c in r[:-1])) and r[-1] for r in matrix)):
 		return []
 
-	if all((sum((1 for c in r[:-1] if c)) == 1 for r in matrix)):
-		return [r[-1] for r in matrix]
+	target = [t.copy() for t in target]
 
-	return optimize(matrix, target)
+	solution = {
+		next((i for (i, c) in enumerate(r[:-1]) if c)): r[-1]
+		for r in matrix
+		if sum((1 for c in r[:-1] if c)) == 1
+	}
+
+	matrix = transpose(matrix)
+
+	for index in sorted(solution, reverse=True):
+		del matrix[index]
+		del target[index]
+
+	matrix = transpose(matrix)
+
+	for index in range(len(matrix) - 1, -1, -1):
+		if not any(matrix[index][:-1]):
+			del matrix[index]
+
+	solution = [
+		solution[i] if i in solution else None
+		for i in range(count_variables)
+	]
+
+	if not matrix:
+		return solution
+
+	solution_optimized = optimize(matrix, target)
+
+	if solution_optimized:
+		index_optimized = 0
+
+		for (index, variable) in enumerate(solution):
+			if variable is None:
+				solution[index] = solution_optimized[index_optimized]
+
+				index_optimized += 1
+
+	return solution
 
 
 if __name__ == '__main__':
