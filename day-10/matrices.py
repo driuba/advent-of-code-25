@@ -6,6 +6,10 @@ def add_member(matrix_a, matrix_b):
 	return _apply_memberwise(matrix_a, matrix_b, lambda a, b: a + b)
 
 
+def copy(matrix):
+	return [list(r) for r in matrix]
+
+
 def identity(size, element_type = int):
 	return [
 		[

@@ -1,14 +1,21 @@
 #!/bin/env python3.14t
 
 
+from collections import deque
 from fractions import Fraction
 from itertools import product
-from math import inf, lcm
+from math import (
+	ceil,
+	floor,
+	inf,
+	lcm
+)
 from operator import itemgetter
 from sys import argv
 
 from matrices import (
 	add_member,
+	copy,
 	identity,
 	multiply,
 	multiply_member,
@@ -33,8 +40,7 @@ def analyze(_, buttons, joltages):
 
 		print()
 
-		# bounds = get_bounds(matrix)
-		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]])
+		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]], get_bounds(matrix))
 
 		for variable in solution:
 			print(' ' * 8 if variable is None else f'{variable: >8}', end='')
@@ -99,7 +105,7 @@ def optimize(matrix, target):
 	The input is expected to be normal linear equation system in matrix form.
 	"""
 
-	matrix = [r.copy() for r in matrix]
+	matrix = copy(matrix)
 	matrix_basic_inverse = identity(len(matrix), Fraction)
 
 	for (index, row) in enumerate(matrix):
@@ -347,7 +353,7 @@ def reduce(matrix, index_row_target = None):
 	The end result is filtered and only non-trivial rows are returned.
 	"""
 
-	matrix = [r.copy() for r in matrix]
+	matrix = copy(matrix)
 
 	index_row = 0 if index_row_target is None else index_row_target
 	count_rows = len(matrix) if index_row_target is None else index_row_target + 1
@@ -385,76 +391,119 @@ def reduce(matrix, index_row_target = None):
 
 	return matrix
 
-def solve(matrix, target):
-	if not len(matrix):
-		return []
+def solve(matrix, target, bounds):
+	def solve_internal(matrix, target):
+		if not len(matrix):
+			return []
 
-	count_variables = len(matrix[0]) - 1
+		count_variables = len(matrix[0]) - 1
 
-	matrix = reduce(matrix)
+		matrix = reduce(matrix)
 
-	# for row in matrix:
-	# 	for column in row:
-	# 		print(f'{column: >8}', end='')
-	#
-	# 	print()
-	#
-	# print()
+		# for row in matrix:
+		# 	for column in row:
+		# 		print(f'{column: >8}', end='')
+		#
+		# 	print()
+		#
+		# print()
 
-	if any((all((not c for c in r[:-1])) and r[-1] for r in matrix)):
-		return []
+		if any((all((not c for c in r[:-1])) and r[-1] for r in matrix)):
+			return []
 
-	target = [t.copy() for t in target]
+		target = copy(target)
 
-	solution = {
-		next((i for (i, c) in enumerate(r[:-1]) if c)): r[-1]
-		for r in matrix
-		if sum((1 for c in r[:-1] if c)) == 1
-	}
+		solution = {
+			next((i for (i, c) in enumerate(r[:-1]) if c)): r[-1]
+			for r in matrix
+			if sum((1 for c in r[:-1] if c)) == 1
+		}
 
-	matrix = transpose(matrix)
+		matrix = transpose(matrix)
 
-	for index in sorted(solution, reverse=True):
-		del matrix[index]
-		del target[index]
-
-	matrix = transpose(matrix)
-
-	for index in range(len(matrix) - 1, -1, -1):
-		if not any(matrix[index][:-1]):
+		for index in sorted(solution, reverse=True):
 			del matrix[index]
+			del target[index]
 
-	solution = [
-		solution[i] if i in solution else None
-		for i in range(count_variables)
-	]
+		matrix = transpose(matrix)
 
-	# for row in matrix:
-	# 	for column in row:
-	# 		print(f'{column: >8}', end='')
-	#
-	# 	print()
-	#
-	# print()
-	#
-	# for variable in solution:
-	# 	print(' ' * 8 if variable is None else f'{variable: >8}', end='')
-	#
-	# print('\n')
+		for index in range(len(matrix) - 1, -1, -1):
+			if not any(matrix[index][:-1]):
+				del matrix[index]
 
-	if not matrix:
+		solution = [
+			solution[i] if i in solution else None
+			for i in range(count_variables)
+		]
+
+		# for row in matrix:
+		# 	for column in row:
+		# 		print(f'{column: >8}', end='')
+		#
+		# 	print()
+		#
+		# print()
+		#
+		# for variable in solution:
+		# 	print(' ' * 8 if variable is None else f'{variable: >8}', end='')
+		#
+		# print('\n')
+
+		if not matrix:
+			if all((s.is_integer() for s in solution)):
+				return solution
+			else:
+				return []
+
+		solution_optimized = optimize(matrix, target)
+
+		if solution_optimized:
+			index_optimized = 0
+
+			for (index, variable) in enumerate(solution):
+				if variable is None:
+					solution[index] = solution_optimized[index_optimized]
+
+					index_optimized += 1
+
 		return solution
 
-	solution_optimized = optimize(matrix, target)
+	queue = deque()
 
-	if solution_optimized:
-		index_optimized = 0
+	queue.append(matrix)
 
-		for (index, variable) in enumerate(solution):
-			if variable is None:
-				solution[index] = solution_optimized[index_optimized]
+	upper_bound = inf
+	solution = []
 
-				index_optimized += 1
+	while queue:
+		matrix = queue.popleft()
+
+		candidate = solve_internal(matrix, target)
+
+		if not candidate:
+			continue
+
+		if any((c is None for c in candidate)):
+			continue
+
+		[[cost]] = multiply([candidate], target)
+
+		if upper_bound > cost:
+			if all((c.is_integer() for c in candidate)):
+				solution = candidate
+				upper_bound = cost
+			else:
+				for (index, (variable, (lower, upper))) in enumerate(zip(candidate, bounds)):
+					if variable.is_integer():
+						continue
+
+					for variable in [Fraction(floor(variable)), Fraction(ceil(variable))]:
+						if lower <= variable <= upper:
+							branch = copy(matrix)
+
+							branch.append([*(Fraction(1) if i == index else Fraction(0) for i in range(len(candidate))), variable])
+
+							queue.append(branch)
 
 	return solution
 
