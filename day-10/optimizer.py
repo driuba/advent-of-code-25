@@ -13,9 +13,6 @@ from math import (
 from operator import itemgetter
 from sys import argv
 
-import numpy as np
-from scipy.optimize import linprog
-
 from matrices import (
 	add_member,
 	copy,
@@ -35,27 +32,7 @@ def analyze(_, buttons, joltages):
 		matrix = transpose(matrix)
 		matrix = [[*mr, Fraction(r)] for (mr, r) in zip(matrix, joltages)]
 
-		matrix_np = np.matrix(matrix, dtype=float)
-
-		c = np.ones(matrix_np.shape[1] - 1, dtype=float)
-		A = matrix_np[:, :-1]
-		b = matrix_np[:, -1].T[0]
-		bounds = [(0, None)] * (matrix_np.shape[1] - 1)
-
-		solution_sp = linprog(c, A_eq=A, b_eq=b, integrality=1)
-		solution_sp = np.rint(solution_sp.x).astype(int)
-
-		result_sp = solution_sp.sum()
-
 		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]], get_bounds(matrix))
-
-		result = sum(solution)
-
-		# [validation] = (A @ np.matrix([solution], dtype=float).T).T
-		# [validation_sp] = (A @ solution_sp.reshape((-1, 1))).T
-		#
-		# print(validation)
-		# print(validation_sp)
 
 		for row in matrix:
 			for column in row:
@@ -70,17 +47,7 @@ def analyze(_, buttons, joltages):
 
 		print()
 
-		for variable in solution_sp:
-			print(' ' * 8 if variable is None else f'{variable: >8}', end='')
-
-		print()
-
-		print(result, result_sp)
-
-		if result != result_sp:
-			raise Exception('This matrix right here, officer.')
-
-		return result
+		return sum(solution)
 	finally:
 		print()
 
@@ -163,49 +130,10 @@ def optimize(matrix, target):
 
 	indices_basic = list(range(count_variables, len(target)))
 
-	# print(*(f'{i: >8}' for i in indices_basic), sep='')
-	# print(*(f'{s[0]: >8}' for s in solution), sep='')
-	# print(*(f'{t[0]: >8}' for t in target), sep='', end='\n\n')
-
-	# for row in matrix:
-	# 	for column in row:
-	# 		print(f'{column: >8}', end='')
-	#
-	# 	print()
-	#
-	# print()
-
 	while True:
 		solution_basic = multiply(matrix_basic_inverse, [r[-1:] for r in matrix])
 
 		target_basic = transpose([target[ib] for ib in indices_basic])
-
-		# print(*(f'{i: >8}' for i in indices_basic), sep='')
-		# print(*(f'{s[0]: >8}' for s in solution_basic), sep='')
-		# print(*(f'{s[0]: >8}' for s in solution), sep='')
-		# print(*(f'{c: >8}' for c in target_basic[0]), sep='', end='\n\n')
-
-		# print(
-		# 	*(
-		# 		(i, c)
-		# 		for (i, c, d)
-		# 		in (
-		# 			(
-		# 				i,
-		# 				target[i][0] - multiply(target_basic, d)[0][0],
-		# 				d
-		# 			)
-		# 			for (i, d)
-		# 			in (
-		# 				(i, multiply(matrix_basic_inverse, transpose([r])))
-		# 				for (i, r)
-		# 				in enumerate(matrix_transposed[:-1])
-		# 				if i not in indices_basic
-		# 			)
-		# 		)
-		# 	),
-		# 	sep='\n'
-		# )
 
 		(index_entering, cost_entering, distances_basic) = min(
 			(
@@ -231,25 +159,11 @@ def optimize(matrix, target):
 			key=itemgetter(1, 0)
 		)
 
-		# print(index_entering, cost_entering, distances_basic, end='\n\n')
-
 		if index_entering is None:
 			if any((s for [s] in solution[count_variables:])):
 				return []
 
 			return transpose(solution)[0]
-
-		# print(
-		# 	*(
-		# 		(i, sb, db)
-		# 		for (i, (sb, db))
-		# 		in enumerate(zip(
-		# 			transpose(solution_basic)[0],
-		# 			transpose(distances_basic)[0]
-		# 		))
-		# 	),
-		# 	sep='\n'
-		# )
 
 		(index_leaving, distance_leaving, ratio) = min(
 			(
@@ -273,8 +187,6 @@ def optimize(matrix, target):
 
 		if index_leaving is None:
 			return []
-
-		# print(index_leaving, distance_leaving, ratio, end='\n\n')
 
 		for (index_basic, [distance_basic]) in zip(indices_basic, distances_basic):
 			if index_basic == indices_basic[index_leaving]:
@@ -300,18 +212,6 @@ def optimize(matrix, target):
 			matrix = transpose(matrix_transposed)
 			solution = solution[:count_variables]
 			target = target_phase_2
-
-		# print(index_entering, index_leaving, end='\n\n')
-
-		# print(*(f'{i: >8}' for i in indices_basic), sep='', end='\n\n')
-		#
-		# for row in matrix_basic_inverse:
-		# 	for column in row:
-		# 		print(f'{column: >8}', end='')
-		#
-		# 	print()
-		#
-		# print()
 
 
 def process(filename):
@@ -406,14 +306,6 @@ def solve(matrix, target, bounds):
 
 		matrix = reduce(matrix)
 
-		# for row in matrix:
-		# 	for column in row:
-		# 		print(f'{column: >8}', end='')
-		#
-		# 	print()
-		#
-		# print()
-
 		if any((all((not c for c in r[:-1])) and r[-1] for r in matrix)):
 			return []
 
@@ -441,19 +333,6 @@ def solve(matrix, target, bounds):
 			solution[i] if i in solution else None
 			for i in range(count_variables)
 		]
-
-		# for row in matrix:
-		# 	for column in row:
-		# 		print(f'{column: >8}', end='')
-		#
-		# 	print()
-		#
-		# print()
-		#
-		# for variable in solution:
-		# 	print(' ' * 8 if variable is None else f'{variable: >8}', end='')
-		#
-		# print('\n')
 
 		if not matrix:
 			if all((s.is_integer() for s in solution)):
@@ -507,12 +386,17 @@ def solve(matrix, target, bounds):
 						continue
 
 					for variable in [Fraction(floor(variable)), Fraction(ceil(variable))]:
-						if lower <= variable <= upper:
-							branch = copy(matrix)
+						if not lower <= variable <= upper:
+							continue
 
-							branch.append([*(Fraction(1) if i == index else Fraction(0) for i in range(len(candidate))), variable])
+						if upper_bound <= multiply([[variable if i == index else c for (i, c) in enumerate(candidate)]], target)[0][0]:
+							continue
 
-							queue.append(branch)
+						branch = copy(matrix)
+
+						branch.append([*(Fraction(1) if i == index else Fraction(0) for i in range(len(candidate))), variable])
+
+						queue.append(branch)
 
 	return solution
 
