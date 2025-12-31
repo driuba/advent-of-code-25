@@ -13,6 +13,9 @@ from math import (
 from operator import itemgetter
 from sys import argv
 
+import numpy as np
+from scipy.optimize import linprog
+
 from matrices import (
 	add_member,
 	copy,
@@ -32,6 +35,28 @@ def analyze(_, buttons, joltages):
 		matrix = transpose(matrix)
 		matrix = [[*mr, Fraction(r)] for (mr, r) in zip(matrix, joltages)]
 
+		matrix_np = np.matrix(matrix, dtype=float)
+
+		c = np.ones(matrix_np.shape[1] - 1, dtype=float)
+		A = matrix_np[:, :-1]
+		b = matrix_np[:, -1].T[0]
+		bounds = [(0, None)] * (matrix_np.shape[1] - 1)
+
+		solution_sp = linprog(c, A_eq=A, b_eq=b, integrality=1)
+		solution_sp = np.rint(solution_sp.x).astype(int)
+
+		result_sp = solution_sp.sum()
+
+		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]], get_bounds(matrix))
+
+		result = sum(solution)
+
+		# [validation] = (A @ np.matrix([solution], dtype=float).T).T
+		# [validation_sp] = (A @ solution_sp.reshape((-1, 1))).T
+		#
+		# print(validation)
+		# print(validation_sp)
+
 		for row in matrix:
 			for column in row:
 				print(f'{column: >8}', end='')
@@ -40,14 +65,22 @@ def analyze(_, buttons, joltages):
 
 		print()
 
-		solution = solve(matrix, [[Fraction(1)] for _ in matrix[0][:-1]], get_bounds(matrix))
-
 		for variable in solution:
 			print(' ' * 8 if variable is None else f'{variable: >8}', end='')
 
 		print()
 
-		return sum(solution)
+		for variable in solution_sp:
+			print(' ' * 8 if variable is None else f'{variable: >8}', end='')
+
+		print()
+
+		print(result, result_sp)
+
+		if result != result_sp:
+			raise Exception('This matrix right here, officer.')
+
+		return result
 	finally:
 		print()
 
@@ -109,10 +142,6 @@ def optimize(matrix, target):
 	matrix_basic_inverse = identity(len(matrix), Fraction)
 
 	for (index, row) in enumerate(matrix):
-		# multiplier = lcm(*(c.denominator for c in row))
-		#
-		# matrix[index] = row = [c * multiplier for c in row]
-
 		if row[-1] < 0:
 			matrix[index] = [-1 * c for c in row]
 
@@ -155,7 +184,7 @@ def optimize(matrix, target):
 		# print(*(f'{s[0]: >8}' for s in solution_basic), sep='')
 		# print(*(f'{s[0]: >8}' for s in solution), sep='')
 		# print(*(f'{c: >8}' for c in target_basic[0]), sep='', end='\n\n')
-		#
+
 		# print(
 		# 	*(
 		# 		(i, c)
@@ -199,12 +228,12 @@ def optimize(matrix, target):
 				if c < 0
 			),
 			default=(None, 0, None),
-			key=itemgetter(0)
+			key=itemgetter(1, 0)
 		)
 
 		# print(index_entering, cost_entering, distances_basic, end='\n\n')
 
-		if cost_entering >= 0:
+		if index_entering is None:
 			if any((s for [s] in solution[count_variables:])):
 				return []
 
@@ -222,51 +251,28 @@ def optimize(matrix, target):
 		# 	sep='\n'
 		# )
 
-		if target is target_phase_1:
-			(index_leaving, distance_leaving, ratio, *_) = min(
-				(
-					(i, db, r, ib)
-					for (i, db, r, ib)
-					in (
-						(i, db, sb / db, ib)
-						for (i, (sb, db, ib))
-						in enumerate(zip(
-							transpose(solution_basic)[0],
-							transpose(distances_basic)[0],
-							indices_basic
-						))
-						if db
-					)
-					if r >= 0 and ib >= count_variables
-				),
-				default=(None, 0, None),
-				key=itemgetter(2, 0)
-			)
+		(index_leaving, distance_leaving, ratio) = min(
+			(
+				(i, db, r)
+				for (i, db, r, ib)
+				in (
+					(i, db, sb / db, ib)
+					for (i, (sb, db, ib))
+					in enumerate(zip(
+						transpose(solution_basic)[0],
+						transpose(distances_basic)[0],
+						indices_basic
+					))
+					if db > 0
+				)
+				if r >= 0
+			),
+			default=(None, 0, None),
+			key=itemgetter(2, 0)
+		)
 
-			if index_leaving is None:
-				return []
-		else:
-			(index_leaving, distance_leaving, ratio) = min(
-				(
-					(i, db, r)
-					for (i, db, r)
-					in (
-						(i, db, sb / db)
-						for (i, (sb, db))
-						in enumerate(zip(
-							transpose(solution_basic)[0],
-							transpose(distances_basic)[0]
-						))
-						if db > 0
-					)
-					if r > 0
-				),
-				default=(None, 0, None),
-				key=itemgetter(2, 0)
-			)
-
-			if distance_leaving <= 0:
-				return []
+		if index_leaving is None:
+			return []
 
 		# print(index_leaving, distance_leaving, ratio, end='\n\n')
 
@@ -296,7 +302,7 @@ def optimize(matrix, target):
 			target = target_phase_2
 
 		# print(index_entering, index_leaving, end='\n\n')
-		#
+
 		# print(*(f'{i: >8}' for i in indices_basic), sep='', end='\n\n')
 		#
 		# for row in matrix_basic_inverse:
@@ -484,6 +490,9 @@ def solve(matrix, target, bounds):
 			continue
 
 		if any((c is None for c in candidate)):
+			continue
+
+		if not all((l <= c <= u for (c, (l, u)) in zip(candidate, bounds))):
 			continue
 
 		[[cost]] = multiply([candidate], target)
