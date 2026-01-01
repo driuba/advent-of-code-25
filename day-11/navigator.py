@@ -5,34 +5,29 @@ from collections import deque
 from sys import argv
 
 
-YOU = 'you'
+IN = 'svr'
+MIDS = ('dac', 'fft')
 OUT = 'out'
 
 
-def find_paths(network):
-	def iterate():
-		try:
-			queue = deque()
+def count_paths(network, nodes, start, *ends):
+	counts = {n: 1 if n == start else 0 for n in network}
 
-			queue.append([YOU])
+	for node in nodes:
+		for connection in network[node]:
+			counts[connection] += counts[node]
 
-			while queue:
-				path = queue.pop()
-				machine = path[-1]
+	return tuple((counts[e] for e in ends))
 
-				if machine == OUT:
-					print(*path)
 
-					yield path
+def invert(network):
+	network_inverted = {n: set() for n in network}
 
-					continue
+	for (machine, connections) in network.items():
+		for connection in connections:
+			network_inverted[connection].add(machine)
 
-				for connection in network[machine] - set(path):
-					queue.append([*path, connection])
-		finally:
-			print()
-
-	return list(iterate())
+	return network_inverted
 
 
 def main():
@@ -46,14 +41,30 @@ def main():
 
 
 def process(filename):
-	print(
-		'The result is',
-		len(
-			find_paths(
-				read_file(filename)
-			)
-		)
-	)
+	network = read_file(filename)
+
+	network_inverted = invert(network)
+
+	nodes = deque()
+
+	while network_inverted:
+		for node in [n for (n, cs) in network_inverted.items() if not cs]:
+			del network_inverted[node]
+
+			nodes.append(node)
+
+			for connection in network[node]:
+				network_inverted[connection].remove(node)
+
+	(a, b) = MIDS
+
+	(count_in_a, count_in_b) = count_paths(network, nodes, IN, a, b)
+
+	(count_a_b, count_a_out) = count_paths(network, nodes, a, b, OUT)
+
+	(count_b_a, count_b_out) = count_paths(network, nodes, b, a, OUT)
+
+	print('The result is', count_in_a * count_a_b * count_b_out + count_in_b * count_b_a * count_a_out)
 
 
 def read_file(filename):
@@ -66,8 +77,10 @@ def read_file(filename):
 
 				yield (
 					machine.strip(),
-					frozenset(connections.strip().split())
+					set(connections.strip().split())
 				)
+
+			yield ('out', set())
 
 	return {m:cs for (m, cs) in iterate()}
 
