@@ -1,47 +1,3 @@
-SYMETRIES = [
-	(
-		(0, 1, 2),
-		(3, 4, 5),
-		(6, 7, 8)
-	),
-	(
-		(0, 3, 6),
-		(1, 4, 7),
-		(2, 5, 8)
-	),
-	(
-		(2, 1, 0),
-		(5, 4, 3),
-		(8, 7, 6)
-	),
-	(
-		(2, 5, 8),
-		(1, 4, 7),
-		(0, 3, 6)
-	),
-	(
-		(6, 3, 0),
-		(7, 4, 1),
-		(8, 5, 2)
-	),
-	(
-		(6, 7, 8),
-		(3, 4, 5),
-		(0, 1, 2)
-	),
-	(
-		(8, 5, 2),
-		(7, 4, 1),
-		(6, 3, 0)
-	),
-	(
-		(8, 7, 6),
-		(5, 4, 3),
-		(2, 1, 0)
-	)
-]
-
-
 def empty(rows, columns):
 	return [[0 for _ in range(columns)] for _ in range(rows)]
 
@@ -55,7 +11,7 @@ def format_cell(rgb, value):
 		*(str(c) for c in rgb)
 	])
 
-	return f'\033[{code}m \033[0m' if value else ' '
+	return f'\033[{code}m  \033[0m' if value else '  '
 
 
 def generate_gradient(steps, *stops):
@@ -89,3 +45,47 @@ def generate_gradient(steps, *stops):
 			yield from _generate_stage(start, stop, stage)
 
 	return list(_generate())
+
+
+def generate_symetries(grid):
+	def _generate():
+		yield grid
+
+		a = _reverse(grid)
+		b = _transpose(grid)
+
+		yield a
+		yield b
+
+		a = _transpose(a)
+		b = _reverse(b)
+
+		yield a
+		yield b
+
+		a = _reverse(a)
+
+		yield a
+		yield _transpose(b)
+		yield _transpose(a)
+
+	return set(_generate())
+
+
+def _reverse(grid):
+	return tuple(reversed(grid))
+
+
+def _transpose(grid):
+	assert grid
+	assert all(len(r) == len(grid[0]) for r in grid)
+
+	def _transpose_column(column):
+		for row in range(len(grid)):
+			yield grid[row][column]
+
+	def _transpose_rows():
+		for column in range(len(grid[0])):
+			yield _transpose_column(column)
+
+	return tuple((tuple(r) for r in _transpose_rows()))

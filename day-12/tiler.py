@@ -5,9 +5,9 @@ from re import compile
 from sys import argv
 
 from utils import (
-	SYMETRIES,
 	format_cell,
-	generate_gradient
+	generate_gradient,
+	generate_symetries
 )
 
 
@@ -53,20 +53,6 @@ def count_vertices(shape):
 	return sum(_iterate())
 
 
-def generate_symetries(shapes):
-	def _generate(shape):
-		for symetry in SYMETRIES:
-			yield tuple((
-				tuple((
-					shape[c // 3][c % 3]
-					for c in r
-				))
-				for r in symetry
-			))
-
-	return [list(set(_generate(s))) for (*_, s) in shapes]
-
-
 def main():
 	count = len(argv) - 1
 
@@ -77,15 +63,14 @@ def main():
 	process(filename)
 
 
-def print_shapes(shapes):
-	symetries = generate_symetries(shapes)
-
-	colors = generate_gradient(sum((len(ss) for ss in symetries)), (255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255))
+def print_shapes(symetries):
+	colors = generate_gradient(sum((len(ss) for (*_, ss) in symetries)), (255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255))
 
 	print(*(format_cell(c, True) for c in colors), sep='', end='\n\n')
 
-	for (index_symetry, ((vertices, edges, *_), shapes)) in enumerate(zip(shapes, symetries)):
-		color_offset = sum((len(ss) for ss in symetries[:index_symetry]))
+	for (index_symetry, (vertices, edges, shapes)) in enumerate(symetries):
+		color_offset = sum((len(ss) for (*_, ss) in symetries[:index_symetry]))
+		shapes = list(shapes)
 
 		print(vertices, edges)
 
@@ -103,7 +88,7 @@ def print_shapes(shapes):
 def process(filename):
 	(shapes, trees) = read_file(filename)
 
-	shapes = [(count_vertices(s), count_edges(s), s) for s in shapes]
+	shapes = [(count_vertices(s), count_edges(s), generate_symetries(s)) for s in shapes]
 
 	print_shapes(shapes)
 
