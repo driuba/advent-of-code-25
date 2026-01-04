@@ -5,12 +5,52 @@ from re import compile
 from sys import argv
 
 from utils import (
-	SYMETRIES
+	SYMETRIES,
+	format_cell,
+	generate_gradient
 )
 
 
 SHAPE_INDEX = compile(r'^\d+:$')
 TREE_SIZE = compile(r'^\d+x\d+:')
+
+
+def count_edges(shape):
+	def _iterate_kernel(target_row, target_column):
+		for index_row in range(target_row - 1, target_row + 2):
+			if not 0 <= index_row <= 2:
+				continue
+
+			for index_column in range(target_column - 1, target_column + 2):
+				if not 0 <= index_column <= 2:
+					continue
+
+				if index_row == target_row and index_column == target_column:
+					continue
+
+				if index_row != target_row and index_column != target_column:
+					continue
+
+				if shape[index_row][index_column]:
+					yield 1
+
+	def _iterate():
+		for (index_row, row) in enumerate(shape):
+			for (index_column, cell) in enumerate(row):
+				if cell:
+					yield from _iterate_kernel(index_row, index_column)
+
+	return sum(_iterate()) // 2
+
+
+def count_vertices(shape):
+	def _iterate():
+		for row in shape:
+			for cell in row:
+				if cell:
+					yield 1
+
+	return sum(_iterate())
 
 
 def generate_symetries(shapes):
@@ -24,7 +64,7 @@ def generate_symetries(shapes):
 				for r in symetry
 			))
 
-	return [list(set(_generate(s))) for s in shapes]
+	return [list(set(_generate(s))) for (*_, s) in shapes]
 
 
 def main():
@@ -37,21 +77,35 @@ def main():
 	process(filename)
 
 
-def process(filename):
-	(shapes, trees) = read_file(filename)
+def print_shapes(shapes):
+	symetries = generate_symetries(shapes)
 
-	shapes = generate_symetries(shapes)
+	colors = generate_gradient(sum((len(ss) for ss in symetries)), (255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255))
 
-	for symetries in shapes:
-		for shape in symetries:
-			for row in shape:
-				print(' ', *(f'{('█' if c else ' ')}' for c in row), sep='')
+	print(*(format_cell(c, True) for c in colors), sep='', end='\n\n')
+
+	for (index_symetry, ((vertices, edges, *_), shapes)) in enumerate(zip(shapes, symetries)):
+		color_offset = sum((len(ss) for ss in symetries[:index_symetry]))
+
+		print(vertices, edges)
+
+		for row in range(3):
+			for (index_shape, shape) in enumerate(shapes):
+				print(*(format_cell(colors[color_offset + index_shape], c) for c in shape[row]), sep='', end='\t')
 
 			print()
 
 		print()
 
 	print()
+
+
+def process(filename):
+	(shapes, trees) = read_file(filename)
+
+	shapes = [(count_vertices(s), count_edges(s), s) for s in shapes]
+
+	print_shapes(shapes)
 
 	# TODO: maybe calculate areas and perimeters for some sort of ranking
 	# TODO: implement my brute force depth first search
@@ -72,7 +126,7 @@ def read_file(filename):
 				if not line:
 					return
 
-				yield tuple((1 if c == '#' else 0 for c in line))
+				yield tuple((c == '#' for c in line))
 
 		return tuple(_iterate())
 
