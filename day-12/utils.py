@@ -1,17 +1,15 @@
-def empty(rows, columns):
-	return [[0 for _ in range(columns)] for _ in range(rows)]
-
-
 def format_cell(rgb, value):
 	assert all((0 <= c <= 255 for c in rgb))
 
-	code = ';'.join([
+	code_true = ';'.join([
 		'48',
 		'2',
 		*(str(c) for c in rgb)
 	])
 
-	return f'\033[{code}m  \033[0m' if value else '  '
+	code_false = ';'.join(['48', '2', '0', '0', '0'])
+
+	return f'\033[{code_true if value else code_false}m  \033[0m'
 
 
 def generate_gradient(steps, *stops):
@@ -51,35 +49,55 @@ def generate_symetries(grid):
 	def _generate():
 		yield grid
 
-		a = _reverse(grid)
-		b = _transpose(grid)
+		a = reverse(grid)
+		b = transpose(grid)
 
 		yield a
 		yield b
 
-		a = _transpose(a)
-		b = _reverse(b)
+		a = transpose(a)
+		b = reverse(b)
 
 		yield a
 		yield b
 
-		a = _reverse(a)
+		a = reverse(a)
 
 		yield a
-		yield _transpose(b)
-		yield _transpose(a)
+		yield transpose(b)
+		yield transpose(a)
 
-	return set(_generate())
-
-
-def _reverse(grid):
-	return tuple(reversed(grid))
+	return list(set(_generate()))
 
 
-def _transpose(grid):
+def reverse(grid):
+	return tuple(_reverse(grid))
+
+
+def transpose(grid):
 	assert grid
 	assert all(len(r) == len(grid[0]) for r in grid)
 
+	return tuple((tuple(r) for r in _transpose(grid)))
+
+
+def trim(grid):
+	assert grid
+	assert all(len(r) == len(grid[0]) for r in grid)
+
+	grid = tuple((r for r in grid if any(r)))
+	grid = transpose(grid)
+	grid = tuple((r for r in grid if any(r)))
+	grid = transpose(grid)
+
+	return grid
+
+
+def _reverse(grid):
+	return reversed(grid)
+
+
+def _transpose(grid):
 	def _transpose_column(column):
 		for row in range(len(grid)):
 			yield grid[row][column]
@@ -88,4 +106,5 @@ def _transpose(grid):
 		for column in range(len(grid[0])):
 			yield _transpose_column(column)
 
-	return tuple((tuple(r) for r in _transpose_rows()))
+	return _transpose_rows()
+
