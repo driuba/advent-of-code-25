@@ -3,6 +3,7 @@
 
 from collections import deque
 from functools import reduce
+from random import shuffle
 from re import compile
 from sys import argv
 
@@ -95,19 +96,22 @@ def main():
 
 
 def pad(grid, rows, columns):
+	assert rows >= 0
+	assert columns >= 0
+
 	def _iterate_cells(row):
 		for index in range(-columns, len(row) + columns):
 			if 0 <= index < len(row):
-				yield row[index]
+				yield row[index] or None
 			else:
-				yield False
+				yield None
 
 	def _iterate_rows():
 		for index in range(-rows, len(grid) + rows):
 			if 0 <= index < len(grid):
 				yield tuple(_iterate_cells(grid[index]))
 			else:
-				yield (False,) * (len(grid[0]) + columns * 2)
+				yield (None,) * (len(grid[0]) + columns * 2)
 
 	return tuple(_iterate_rows())
 
@@ -144,6 +148,32 @@ def print_shapes(symetries):
 	print()
 
 
+def print_solution(solution):
+	if not solution:
+		print('No greedy solution was found!')
+
+		return
+
+	cells = list(set((c for r in solution for c in r if c)))
+
+	shuffle(cells)
+
+	colors = [(255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255)]
+	colors = generate_gradient(len(cells), *colors[:len(cells)])
+
+	shuffle(colors)
+
+	colors = {s:c for (c, s) in zip(colors, cells)}
+
+	print(len(solution), 'x', len(solution[0]),sep='')
+
+	for row in solution:
+		for cell in row:
+			print(format_cell(cell and colors[cell], cell), end='')
+
+		print()
+
+
 def process(filename):
 	(shapes, trees) = read_file(filename)
 
@@ -161,13 +191,24 @@ def process(filename):
 	count = 0
 
 	for tree in trees:
-		(vertices, edges, size, presents) = tree
+		(vertices_tree, edges_tree, size, presents) = tree
 
-		print('x'.join((str(s) for s in size)), vertices, edges)
+		(vertices_present, edges_present) = reduce(
+			lambda a, b: (a[0] + b[0], a[1] + b[1]),
+			((v * p, e * p) for ((v, e, *_), p) in zip(shapes, presents))
+		)
+
+		print('x'.join((str(s) for s in size)), vertices_tree, edges_tree, '|', vertices_present, edges_present)
 		print(*presents)
 
-		if solve(shapes, tree):
+		if vertices_present <= vertices_tree and edges_present <= edges_tree:
 			count += 1
+
+			solution = solve(shapes, tree)
+
+			print_solution(solution)
+		else:
+			print('No solution can fit!')
 
 		print()
 
@@ -220,42 +261,20 @@ def read_file(filename):
 
 
 def solve(shapes, tree):
-	def placement_area(symetries):
-		(placement, *_) = symetries
-
-		return len(placement) * len(placement[0])
-
-	(vertices_max, edges_max, (rows_max, columns_max), presents) = tree
+	(*_, (rows_max, columns_max), presents) = tree
 
 	(rows_max, columns_max) = (min(rows_max, columns_max), max(rows_max, columns_max))
 
-	(vertices, edges) = reduce(
-		lambda a, b: (a[0] + b[0], a[1] + b[1]),
-		((v * p, e * p) for ((v, e, *_), p) in zip(shapes, presents))
-	)
-
 	shapes = [s[-1] for s in shapes]
-
-	if vertices > vertices_max or edges > edges_max:
-		return False
-
-	return True
 
 	queue = deque()
 
-	queue.append((frozenset([None]), presents))
+	queue.append((None, presents))
 
-	states_checked = set()
+	states = set()
 
 	while queue:
-		state = queue.pop()
-
-		if state in states_checked:
-			continue
-		else:
-			states_checked.add(state)
-
-		((grid, *_), presents) = state
+		(grid, presents) = queue.pop()
 
 		if grid is None:
 			rows_current = 0
@@ -264,46 +283,73 @@ def solve(shapes, tree):
 			rows_current = min(len(grid), len(grid[0]))
 			columns_current = max(len(grid), len(grid[0]))
 
-		if rows_current > rows_max or columns_current > columns_max:
-			continue
-
 		if all((not p for p in presents)):
-			print(len(grid), len(grid[0]))
-			print_grid(grid)
+			return grid
 
-			return True
+		if grid is not None:
+			state = (
+				frozenset(
+					generate_symetries(
+						tuple((
+							tuple((bool(c) for c in r))
+							for r in grid
+						))
+					)
+				),
+				presents
+			)
 
-		rows_extra = max(0, min(3, rows_max - rows_current))
-		columns_extra = max(0, min(3, columns_max - columns_current))
+			if state in states:
+				continue
+			else:
+				states.add(state)
+
+		rows_extra = min(3, rows_max - rows_current)
+		columns_extra = min(3, columns_max - columns_current)
 
 		if grid is None:
-			grid = ((False,) * 3,) * 3
+			grid = ((None,) * 3,) * 3
 		else:
 			grid = pad(grid, rows_extra, columns_extra)
+
+		area_min = None
+		placements_min = []
 
 		for (index_shape, (symetries, count)) in enumerate(zip(shapes, presents)):
 			if not count:
 				continue
 
-			placements = {}
-
 			for (index_symetry, shape) in enumerate(symetries):
 				for (position, placement) in generate_placements(grid, shape):
-					placement = frozenset(generate_symetries(placement))
+					if area_min is None:
+						area_min = len(placement) * len(placement[0])
+						placements_min = [(placement, index_shape, index_symetry, count - 1)]
 
-					if placement not in placements:
-						placements[placement] = (*position, index_shape, index_symetry)
+						continue
 
-			if not placements:
-				continue
+					area = len(placement) * len(placement[0])
 
-			presents_remaining = tuple((p - 1 if i == index_shape else p for (i, p) in enumerate(presents)))
+					if area < area_min:
+						area_min = area
+						placements_min = [(placement, index_shape, index_symetry, count - 1)]
+					elif area == area_min:
+						placements_min.append((placement, index_shape, index_symetry, count - 1))
 
-			placement = min(placements, key=placement_area)
+		for (placement, index_shape, index_symetry, index_placement) in placements_min:
+			placement = tuple((
+				tuple((
+					(index_shape, index_symetry, index_placement) if c is True else c
+					for c in r
+				))
+				for r in placement
+			))
 
-			queue.append((placement, presents_remaining))
+			queue.append((
+				placement,
+				tuple((p - 1 if i == index_shape else p for (i, p) in enumerate(presents)))
+			))
 
-	return False
+	return None
 
 
 if __name__ == '__main__':

@@ -1,4 +1,6 @@
 def format_cell(rgb, value):
+	rgb = rgb or (255, 255, 255)
+
 	assert all((0 <= c <= 255 for c in rgb))
 
 	code_true = ';'.join([
