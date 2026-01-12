@@ -220,7 +220,14 @@ def read_file(filename):
 
 
 def solve(shapes, tree):
+	def placement_area(symetries):
+		(placement, *_) = symetries
+
+		return len(placement) * len(placement[0])
+
 	(vertices_max, edges_max, (rows_max, columns_max), presents) = tree
+
+	(rows_max, columns_max) = (min(rows_max, columns_max), max(rows_max, columns_max))
 
 	(vertices, edges) = reduce(
 		lambda a, b: (a[0] + b[0], a[1] + b[1]),
@@ -232,9 +239,11 @@ def solve(shapes, tree):
 	if vertices > vertices_max or edges > edges_max:
 		return False
 
+	return True
+
 	queue = deque()
 
-	queue.append((None, presents))
+	queue.append((frozenset([None]), presents))
 
 	states_checked = set()
 
@@ -246,12 +255,7 @@ def solve(shapes, tree):
 		else:
 			states_checked.add(state)
 
-		(grid, presents) = state
-
-		if all((not p for p in presents)):
-			print_grid(grid)
-
-			return True
+		((grid, *_), presents) = state
 
 		if grid is None:
 			rows_current = 0
@@ -260,8 +264,17 @@ def solve(shapes, tree):
 			rows_current = min(len(grid), len(grid[0]))
 			columns_current = max(len(grid), len(grid[0]))
 
-		rows_extra = min(3, rows_max - rows_current)
-		columns_extra = min(3, columns_max - columns_current)
+		if rows_current > rows_max or columns_current > columns_max:
+			continue
+
+		if all((not p for p in presents)):
+			print(len(grid), len(grid[0]))
+			print_grid(grid)
+
+			return True
+
+		rows_extra = max(0, min(3, rows_max - rows_current))
+		columns_extra = max(0, min(3, columns_max - columns_current))
 
 		if grid is None:
 			grid = ((False,) * 3,) * 3
@@ -281,10 +294,14 @@ def solve(shapes, tree):
 					if placement not in placements:
 						placements[placement] = (*position, index_shape, index_symetry)
 
+			if not placements:
+				continue
+
 			presents_remaining = tuple((p - 1 if i == index_shape else p for (i, p) in enumerate(presents)))
 
-			for (placement, *_) in placements:
-				queue.append((placement, presents_remaining))
+			placement = min(placements, key=placement_area)
+
+			queue.append((placement, presents_remaining))
 
 	return False
 
