@@ -22,14 +22,63 @@ TREE_SIZE = compile(r'^\d+x\d+:')
 
 def calculate_greedy_metric(grid):
 	return (
-		len(grid) * len(grid[0]),
-		count_neighbours_empty(grid),
-		sum((1 for r in grid for c in r if not c)),
 		Fraction(
 			max(len(grid), len(grid[0])),
 			min(len(grid), len(grid[0]))
-		)
+		),
+		sum((1 for r in grid for c in r if not c)),
+		calculate_internal_area(grid)
 	)
+
+
+def calculate_internal_area(grid):
+	areas = []
+	visited = set()
+
+	for (index_row, row) in enumerate(grid):
+		for (index_column, cell) in enumerate(row):
+			if cell:
+				continue
+
+			position = (index_row, index_column)
+
+			if position in visited:
+				continue
+
+			area_current = set()
+
+			queue = deque()
+			queue.append(position)
+
+			while queue:
+				position = queue.popleft()
+
+				if grid[position[0]][position[1]]:
+					continue
+
+				if position in visited:
+					continue
+
+				visited.add(position)
+
+				area_current.add(position)
+
+				if position[0] > 0:
+					queue.append((position[0] - 1, position[1]))
+
+				if position[0] < len(grid) - 1:
+					queue.append((position[0] + 1, position[1]))
+
+				if position[1] > 0:
+					queue.append((position[0], position[1] - 1))
+
+				if position[1] < len(grid[0]) - 1:
+					queue.append((position[0], position[1] + 1))
+
+			if all((0 < r < len(grid) - 1 and 0 < c < len(grid[0]) - 1 for (r, c) in area_current)):
+				areas.append(area_current)
+
+	return sum((len(a) for a in areas))
 
 
 def count_edges(shape):
@@ -58,34 +107,6 @@ def count_edges(shape):
 					yield from _iterate_kernel(index_row, index_column)
 
 	return sum(_iterate()) // 2
-
-
-def count_neighbours_empty(shape):
-	def _iterate_kernel(target_row, target_column):
-		for index_row in range(target_row - 1, target_row + 2):
-			if not 0 <= index_row <= 2:
-				continue
-
-			for index_column in range(target_column - 1, target_column + 2):
-				if not 0 <= index_column <= 2:
-					continue
-
-				if index_row == target_row and index_column == target_column:
-					continue
-
-				if index_row != target_row and index_column != target_column:
-					continue
-
-				if shape[index_row][index_column]:
-					yield 1
-
-	def _iterate():
-		for (index_row, row) in enumerate(shape):
-			for (index_column, cell) in enumerate(row):
-				if not cell:
-					yield from _iterate_kernel(index_row, index_column)
-
-	return sum(_iterate())
 
 
 def count_vertices(shape):
@@ -199,14 +220,25 @@ def print_solution(solution):
 
 	colors = [(255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255), (255, 0, 255)]
 	colors = generate_gradient(len(cells), *colors[:len(cells)])
-	colors = sorted(enumerate(colors), key=lambda c: c[0] % 5)
-	colors = {s:c for ((_, c), s) in zip(colors, cells)}
+	colors = {s:c for (c, s) in zip(colors, cells)}
 
 	print(len(solution), 'x', len(solution[0]),sep='')
 
-	for row in solution:
-		for cell in row:
-			print(format_cell(cell and colors[cell], cell), end='')
+	for (index_row, row) in enumerate(solution):
+		for (index_column, cell) in enumerate(row):
+			text = '  '
+
+			if cell:
+				up = down = left = right = False
+
+				if 0 < index_row and solution[index_row - 1][index_column] == cell:
+					up = True
+
+				if up:
+					text = '╰╯'
+
+
+			print(format_cell(cell and colors[cell], cell, text), end='')
 
 		print()
 
@@ -244,8 +276,6 @@ def process(filename):
 			solution = solve(shapes, tree)
 
 			print_solution(solution)
-
-			break
 		else:
 			print('No solution can fit!')
 
@@ -307,13 +337,14 @@ def solve(shapes, tree):
 	shapes = [s[-1] for s in shapes]
 
 	queue = deque()
-
-	queue.append((None, presents))
+	queue.append((None, presents, 0))
 
 	states = set()
 
 	while queue:
-		(grid, presents) = queue.pop()
+		(grid, presents, index) = queue.pop()
+
+		index += 1
 
 		if grid is None:
 			rows_current = 0
@@ -340,8 +371,8 @@ def solve(shapes, tree):
 
 			if state in states:
 				continue
-			else:
-				states.add(state)
+
+			states.add(state)
 
 		if grid is None:
 			grid = ((None,) * 3,) * 3
@@ -365,7 +396,7 @@ def solve(shapes, tree):
 				for (position, placement) in generate_placements(grid, shape):
 					if metric_min is None:
 						metric_min = calculate_greedy_metric(placement)
-						placements_min = [(placement, index_shape, index_symetry, count - 1)]
+						placements_min = [(placement, index_shape, index_symetry)]
 
 						continue
 
@@ -373,14 +404,14 @@ def solve(shapes, tree):
 
 					if metric < metric_min:
 						metric_min = metric
-						placements_min = [(placement, index_shape, index_symetry, count - 1)]
+						placements_min = [(placement, index_shape, index_symetry)]
 					elif metric == metric_min:
-						placements_min.append((placement, index_shape, index_symetry, count - 1))
+						placements_min.append((placement, index_shape, index_symetry))
 
-		for (placement, index_shape, index_symetry, index_placement) in placements_min:
+		for (placement, index_shape, index_symetry) in placements_min:
 			placement = tuple((
 				tuple((
-					(index_shape, index_symetry, index_placement) if c is True else c
+					(index, index_shape, index_symetry) if c is True else c
 					for c in r
 				))
 				for r in placement
@@ -388,7 +419,8 @@ def solve(shapes, tree):
 
 			queue.append((
 				placement,
-				tuple((p - 1 if i == index_shape else p for (i, p) in enumerate(presents)))
+				tuple((p - 1 if i == index_shape else p for (i, p) in enumerate(presents))),
+				index
 			))
 
 	return None

@@ -1,4 +1,4 @@
-def format_cell(rgb, value):
+def format_cell(rgb, value, text='  '):
 	rgb = rgb or (255, 255, 255)
 
 	assert all((0 <= c <= 255 for c in rgb))
@@ -11,7 +11,7 @@ def format_cell(rgb, value):
 
 	code_false = ';'.join(['48', '2', '0', '0', '0'])
 
-	return f'\033[{code_true if value else code_false}m  \033[0m'
+	return f'\033[{code_true if value else code_false}m{text}\033[0m'
 
 
 def generate_gradient(steps, *stops):
