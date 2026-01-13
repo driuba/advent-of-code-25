@@ -69,7 +69,7 @@ def generate_symetries(grid):
 		yield transpose(b)
 		yield transpose(a)
 
-	return list(set(_generate()))
+	return sorted(list(set(_generate())))
 
 
 def reverse(grid):

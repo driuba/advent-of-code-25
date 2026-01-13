@@ -1,7 +1,8 @@
-#!/bin/env python3.14t
+#!/usr/bin/env python3.14t
 
 
 from collections import deque
+from fractions import Fraction
 from functools import reduce
 from random import shuffle
 from re import compile
@@ -17,6 +18,18 @@ from utils import (
 
 SHAPE_INDEX = compile(r'^\d+:$')
 TREE_SIZE = compile(r'^\d+x\d+:')
+
+
+def calculate_greedy_metric(grid):
+	return (
+		len(grid) * len(grid[0]),
+		count_neighbours_empty(grid),
+		sum((1 for r in grid for c in r if not c)),
+		Fraction(
+			max(len(grid), len(grid[0])),
+			min(len(grid), len(grid[0]))
+		)
+	)
 
 
 def count_edges(shape):
@@ -45,6 +58,34 @@ def count_edges(shape):
 					yield from _iterate_kernel(index_row, index_column)
 
 	return sum(_iterate()) // 2
+
+
+def count_neighbours_empty(shape):
+	def _iterate_kernel(target_row, target_column):
+		for index_row in range(target_row - 1, target_row + 2):
+			if not 0 <= index_row <= 2:
+				continue
+
+			for index_column in range(target_column - 1, target_column + 2):
+				if not 0 <= index_column <= 2:
+					continue
+
+				if index_row == target_row and index_column == target_column:
+					continue
+
+				if index_row != target_row and index_column != target_column:
+					continue
+
+				if shape[index_row][index_column]:
+					yield 1
+
+	def _iterate():
+		for (index_row, row) in enumerate(shape):
+			for (index_column, cell) in enumerate(row):
+				if not cell:
+					yield from _iterate_kernel(index_row, index_column)
+
+	return sum(_iterate())
 
 
 def count_vertices(shape):
@@ -127,7 +168,7 @@ def print_grid(grid):
 
 
 def print_shapes(symetries):
-	colors = generate_gradient(sum((len(ss) for (*_, ss) in symetries)), (255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255))
+	colors = generate_gradient(sum((len(ss) for (*_, ss) in symetries)), (255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255), (255, 0, 255))
 
 	print(*(format_cell(c, True) for c in colors), sep='', end='\n\n')
 
@@ -154,16 +195,12 @@ def print_solution(solution):
 
 		return
 
-	cells = list(set((c for r in solution for c in r if c)))
+	cells = sorted(list(set((c for r in solution for c in r if c))))
 
-	shuffle(cells)
-
-	colors = [(255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255)]
+	colors = [(255, 0, 0), (255, 255, 0), (0, 255, 0), (0, 255, 255), (0, 0, 255), (255, 0, 255)]
 	colors = generate_gradient(len(cells), *colors[:len(cells)])
-
-	shuffle(colors)
-
-	colors = {s:c for (c, s) in zip(colors, cells)}
+	colors = sorted(enumerate(colors), key=lambda c: c[0] % 5)
+	colors = {s:c for ((_, c), s) in zip(colors, cells)}
 
 	print(len(solution), 'x', len(solution[0]),sep='')
 
@@ -207,6 +244,8 @@ def process(filename):
 			solution = solve(shapes, tree)
 
 			print_solution(solution)
+
+			break
 		else:
 			print('No solution can fit!')
 
@@ -304,15 +343,18 @@ def solve(shapes, tree):
 			else:
 				states.add(state)
 
-		rows_extra = min(3, rows_max - rows_current)
-		columns_extra = min(3, columns_max - columns_current)
-
 		if grid is None:
 			grid = ((None,) * 3,) * 3
 		else:
+			rows_extra = max(0, min(3, rows_max - rows_current))
+			columns_extra = max(0, min(3, columns_max - columns_current))
+
+			if rows_current == len(grid[0]) and columns_current == len(grid):
+				(rows_extra, columns_extra) = (columns_extra, rows_extra)
+
 			grid = pad(grid, rows_extra, columns_extra)
 
-		area_min = None
+		metric_min = None
 		placements_min = []
 
 		for (index_shape, (symetries, count)) in enumerate(zip(shapes, presents)):
@@ -321,18 +363,18 @@ def solve(shapes, tree):
 
 			for (index_symetry, shape) in enumerate(symetries):
 				for (position, placement) in generate_placements(grid, shape):
-					if area_min is None:
-						area_min = len(placement) * len(placement[0])
+					if metric_min is None:
+						metric_min = calculate_greedy_metric(placement)
 						placements_min = [(placement, index_shape, index_symetry, count - 1)]
 
 						continue
 
-					area = len(placement) * len(placement[0])
+					metric = calculate_greedy_metric(placement)
 
-					if area < area_min:
-						area_min = area
+					if metric < metric_min:
+						metric_min = metric
 						placements_min = [(placement, index_shape, index_symetry, count - 1)]
-					elif area == area_min:
+					elif metric == metric_min:
 						placements_min.append((placement, index_shape, index_symetry, count - 1))
 
 		for (placement, index_shape, index_symetry, index_placement) in placements_min:
